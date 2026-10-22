@@ -1,26 +1,111 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #ffffff;
+  --bg-2: #fcfcfc;
+  --bg-3: #f5f5f5;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-active: rgba(0, 0, 0, 0.07);
+  --border: #ebebeb;
+  --border-light: #f1f1f1;
+  --border-strong: #d6d6d6;
+  --fg: #333333;
+  --fg-2: #666666;
+  --fg-3: #999999;
+  --fg-4: #b3b3b3;
+  --accent: #1961ed;
+  --accent-hover: #1555d1;
+  --accent-soft: #e8efff;
+  --accent-fg: #ffffff;
+  --danger: #e5484d;
+  --danger-soft: #feebec;
+  --success: #29a383;
+  --success-soft: #e6f6eb;
+  --warning: #e28b00;
+  --warning-soft: #fff4d5;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 4px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #171717;
+  --bg-2: #1b1b1b;
+  --bg-3: #222222;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.09);
+  --border: #2a2a2a;
+  --border-light: #222222;
+  --border-strong: #3a3a3a;
+  --fg: #ebebeb;
+  --fg-2: #b3b3b3;
+  --fg-3: #818181;
+  --fg-4: #5f5f5f;
+  --accent: #4a86ff;
+  --accent-hover: #6a9bff;
+  --accent-soft: #1a2643;
+  --danger: #ff6369;
+  --danger-soft: #3b1a1c;
+  --success: #3dd68c;
+  --success-soft: #132d21;
+  --warning: #ffb224;
+  --warning-soft: #33250b;
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * { border-color: var(--border); }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
   }
+  ::selection { background: var(--accent-soft); }
+  input, textarea, select, button { font: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* thin scrollbars like Twenty */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+.react-flow__attribution { display: none; }
