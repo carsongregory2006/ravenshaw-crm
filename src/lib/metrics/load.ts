@@ -36,7 +36,7 @@ export async function loadDataset(opts: { from: Date; to: Date; prevFrom?: Date 
   const [
     payments, invoices, expenses, commissions, spend, deals, stages, contacts, clients, calls, messages, txns, lpEvents, stageChanges, profiles, pages, variants,
   ] = await Promise.all([
-    all<Dataset["payments"][number]>((s) => s.from("payments").select("id, amount, kind, received_at, client_id, deal_id, contact_id").lte("received_at", until).order("received_at"), sb),
+    all<Dataset["payments"][number]>((s) => s.from("payments").select("id, amount, kind, recurring_amount, received_at, client_id, deal_id, contact_id").lte("received_at", until).order("received_at"), sb),
     all<Dataset["invoices"][number]>((s) => s.from("invoices").select("id, invoice_number, amount, status, due_date, issued_at, paid_at, client_id, contact_id, created_at").order("created_at"), sb),
     all<Dataset["expenses"][number]>((s) => s.from("expenses").select("id, date, amount, pl_class, category, vendor").gte("date", sinceDate).order("date"), sb),
     all<Dataset["commissions"][number]>((s) => s.from("commissions").select("id, rep_id, amount, status, created_at, basis, deal_id, base_amount").order("created_at"), sb),
@@ -59,7 +59,7 @@ export async function loadDataset(opts: { from: Date; to: Date; prevFrom?: Date 
     rows.map((r) => { const c = { ...r }; for (const k of keys) (c as Record<string, unknown>)[k as string] = Number(r[k] ?? 0); return c; });
 
   return {
-    payments: num(payments as any[], ["amount"]),
+    payments: num(payments as any[], ["amount", "recurring_amount"]),
     invoices: num(invoices as any[], ["amount"]),
     expenses: num(expenses as any[], ["amount"]),
     commissions: num(commissions as any[], ["amount", "base_amount"]),

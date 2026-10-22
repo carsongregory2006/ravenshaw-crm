@@ -53,9 +53,11 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment 
   }
 
   const receivedAt = input.receivedAt ?? new Date().toISOString();
+  const split = await splitByBasis(invoice, amount);
+  const recurringAmount = split.filter((x) => x.basis === "recurring").reduce((a, x) => a + x.base, 0);
   const { data: payment, error } = await db.from("payments").insert({
     invoice_id: invoice.id, client_id: clientId, contact_id: invoice.contact_id, deal_id: dealId,
-    amount, kind: invoice.kind, received_at: receivedAt, method: input.method ?? "mercury",
+    amount, kind: invoice.kind, recurring_amount: Math.min(amount, recurringAmount), received_at: receivedAt, method: input.method ?? "mercury",
     mercury_transaction_id: input.mercuryTransactionId ?? null, note: input.note ?? null,
   }).select("*").single();
   if (error || !payment) throw new Error(error?.message ?? "Could not record payment");

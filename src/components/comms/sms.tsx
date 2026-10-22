@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import { useEffect, useRef, useState } from "react";
 import { Send, Sparkles, AlertCircle, Check, CheckCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -11,7 +12,7 @@ import { MergeTagMenu, SaveTemplateButton, TemplatePicker } from "./templates";
 import { smsSegments } from "./hooks";
 import type { Message } from "@/lib/types";
 
-export function SmsComposer({ contactId, disabledReason, onSent, autoFocus }: { contactId: string; disabledReason?: string | null; onSent?: () => void; autoFocus?: boolean }) {
+export function SmsComposer({ contactId, disabledReason, onSent, onSettled, autoFocus }: { contactId: string; disabledReason?: string | null; onSent?: () => void; onSettled?: () => void; autoFocus?: boolean }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -32,6 +33,7 @@ export function SmsComposer({ contactId, disabledReason, onSent, autoFocus }: { 
     setSending(true);
     const r = await sendSmsAction(contactId, text);
     setSending(false);
+    onSettled?.(); // failed sends are stored too, so refresh the thread either way
     if (!r.ok) return toast.error(r.error);
     setText("");
     onSent?.();
@@ -93,9 +95,9 @@ export function SmsBubble({ m }: { m: Message }) {
         )}>
           {m.body}
         </div>
-        <div className={cn("mt-0.5 flex items-center gap-1 text-[11px] text-fg-4", out && "justify-end")} title={fmtDateTime(m.created_at)}>
+        <div className={cn("mt-0.5 flex items-center gap-1 text-[11px] text-fg-4", out && "justify-end")}>
           {m.automation_run_id && <span className="rounded-sm bg-bg-3 px-1">Automation</span>}
-          {feedTime(m.created_at)}
+          <Time value={m.created_at} format="feed" />
           {out && <StatusIcon m={m} />}
           {m.status === "failed" && <span className="text-danger">Failed</span>}
         </div>

@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -64,7 +65,7 @@ export function InvoiceTable({ invoices, canManage, onChange, showContact, compa
                 {showContact && <td className="px-2"><div className="truncate">{inv.contact_name ?? "—"}</div>{inv.deal_number && <div className="text-xs text-fg-3">{inv.deal_number}</div>}</td>}
                 {!compact && <td className="px-2"><Tag color={inv.kind === "recurring" ? "purple" : inv.kind === "milestone" ? "orange" : "blue"}>{KIND_LABEL[inv.kind]}</Tag></td>}
                 <td className="px-2"><StatusTag status={inv.status} /></td>
-                <td className="px-2 text-fg-2">{inv.status === "paid" ? <span className="text-success">Paid {fmtDate(inv.paid_at, "MMM d")}</span> : fmtDate(inv.due_date, "MMM d")}</td>
+                <td className="px-2 text-fg-2">{inv.status === "paid" ? <span className="text-success">Paid <Time value={inv.paid_at} format="date" /></span> : fmtDate(inv.due_date, "MMM d")}</td>
                 <td className="px-2 text-right font-medium tabular-nums">{money(inv.amount, { cents: true })}</td>
                 <td className="px-1">
                   <Menu>

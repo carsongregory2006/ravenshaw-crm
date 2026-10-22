@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -54,7 +55,7 @@ export function CompanyRecord({ company: co, people, deals, stages, activities, 
           <div className="flex flex-col items-center gap-2 border-b border-border-light px-4 pb-4 pt-6 text-center">
             <Avatar name={co.name} size={56} square />
             <div className="text-base font-semibold">{co.name}</div>
-            <div className="text-xs text-fg-3">{co.industry || "No industry"} · Added {timeAgo(co.created_at)}</div>
+            <div className="text-xs text-fg-3">{co.industry || "No industry"} · Added <Time value={co.created_at} /></div>
             <div className="mt-2 grid w-full grid-cols-3 gap-2 text-left">
               <Mini label="People" value={String(people.length)} />
               <Mini label="Client MRR" value={money(mrr)} />

@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -51,7 +52,7 @@ export function SystemSettings({ events, lastTick, cronConfigured, appUrl }: {
           <div className="flex items-center gap-2 text-[13px]">
             <Clock className="size-4 text-fg-3" />
             <span>Last tick:</span>
-            {lastTick ? <span title={fmtDateTime(lastTick.created_at)}>{timeAgo(lastTick.created_at)}</span> : <span className="text-fg-3">never</span>}
+            {lastTick ? <span><Time value={lastTick.created_at} /></span> : <span className="text-fg-3">never</span>}
             {lastTick && (healthy ? <Tag color="green">Healthy</Tag> : lastTick.error ? <Tag color="red">Error</Tag> : <Tag color="yellow">Stale</Tag>)}
           </div>
           {lastTick?.error && <div className="mt-2 rounded-md bg-danger-soft px-2 py-1.5 font-mono text-xs text-danger">{lastTick.error}</div>}
@@ -93,7 +94,7 @@ export function SystemSettings({ events, lastTick, cronConfigured, appUrl }: {
                       <td className="px-2 py-1.5"><Tag>{e.provider}</Tag></td>
                       <td className="max-w-[220px] truncate px-2 py-1.5 font-mono text-xs">{e.event_type ?? "—"}</td>
                       <td className="px-2 py-1.5">{e.error ? <Tag color="red">Error</Tag> : e.processed_at ? <Tag color="green">Processed</Tag> : <Tag color="yellow">Received</Tag>}</td>
-                      <td className="px-2 py-1.5 text-right text-xs text-fg-3" title={fmtDateTime(e.created_at)}>{timeAgo(e.created_at)}</td>
+                      <td className="px-2 py-1.5 text-right text-xs text-fg-3"><Time value={e.created_at} /></td>
                     </tr>
                     {open === e.id && (
                       <tr className="border-b border-border-light bg-bg-2">

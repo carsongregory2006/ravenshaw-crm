@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, LogOut, PanelLeftClose, Search, Bell, User as UserIcon } from "lucide-react";
+import { ChevronDown, LogOut, PanelLeftClose, Search, Bell, Phone, User as UserIcon } from "lucide-react";
+import { useDialer } from "@/components/comms/dialer";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { NAV, SETTINGS_ITEM, type NavItem } from "./nav";
@@ -34,6 +35,7 @@ export function Sidebar({ profile, workspaceName, unread, onSearch, onNotificati
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const dialer = useDialer();
   const isActive = (href: string) => pathname === href || (href !== "/finance" && pathname.startsWith(href + "/")) || (href === "/finance" && pathname === "/finance");
 
   if (collapsed) return null;
@@ -80,6 +82,9 @@ export function Sidebar({ profile, workspaceName, unread, onSearch, onNotificati
         <button onClick={onNotifications} className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] text-fg-2 hover:bg-hover hover:text-fg cursor-pointer">
           <Bell className="size-4 text-fg-3" /> Notifications
           {unread > 0 && <span className="ml-auto rounded-sm bg-accent px-1 text-[10px] font-semibold text-white">{unread}</span>}
+        </button>
+        <button onClick={() => dialer.open?.()} className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] text-fg-2 hover:bg-hover hover:text-fg cursor-pointer">
+          <Phone className="size-4 text-fg-3" /> Phone
         </button>
         <NavLink item={SETTINGS_ITEM} active={isActive("/settings")} />
       </div>

@@ -387,7 +387,7 @@ export function LandingEditor({ initialPage, initialVariants, initialMembers, re
                 </Menu>
               }>Sections · {active?.name}</SectionTitle>
               {active && active.sections.length > 0 ? (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                <DndContext id="lp-sections" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                   <SortableContext items={active.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-px">
                       {active.sections.map((s) => (

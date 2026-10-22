@@ -85,6 +85,12 @@ function Canvas({ automation, lookups, initialTab }: { automation: Automation; l
   const [pending, start] = useTransition();
   const dirtyRef = useRef(0);
 
+  // Initial view frames the start of the flow (trigger + first steps) at a readable zoom, like n8n.
+  const initialFit = useMemo(() => ({
+    padding: 0.15, maxZoom: 1, minZoom: 0.6,
+    nodes: [...automation.nodes].sort((a, b) => a.position.x - b.position.x).slice(0, 6).map((n) => ({ id: n.id })),
+  }), [automation.nodes]);
+
   const markDirty = useCallback(() => { dirtyRef.current++; setSaveState("dirty"); }, []);
 
   const graph = useMemo(() => ({ nodes: fromFlowNodes(nodes), edges: fromFlowEdges(edges) }), [nodes, edges]);
@@ -229,7 +235,7 @@ function Canvas({ automation, lookups, initialTab }: { automation: Automation; l
   const tidy = () => {
     setNodes((ns) => autoLayout(ns, edges));
     markDirty();
-    setTimeout(() => rf.fitView({ duration: 300, padding: 0.2, maxZoom: 1 }), 50);
+    setTimeout(() => rf.fitView({ duration: 300, padding: 0.15, maxZoom: 1, minZoom: 0.6 }), 50);
   };
 
   // ── status / test ──
@@ -322,7 +328,7 @@ function Canvas({ automation, lookups, initialTab }: { automation: Automation; l
               deleteKeyCode={["Backspace", "Delete"]}
               defaultEdgeOptions={{ type: "auto", markerEnd: marker }}
               fitView
-              fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
+              fitViewOptions={initialFit}
               minZoom={0.2}
               maxZoom={1.75}
               proOptions={{ hideAttribution: true }}

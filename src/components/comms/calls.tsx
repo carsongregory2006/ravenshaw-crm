@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import { useState } from "react";
 import { PhoneIncoming, PhoneOutgoing, PhoneMissed, Sparkles, Pencil, Phone } from "lucide-react";
 import { toast } from "sonner";
@@ -79,7 +80,7 @@ export function CallRow({ call, onChanged }: { call: Call; onChanged: () => void
             {disp && <Tag color="purple">{disp}</Tag>}
           </div>
           <div className="text-xs text-fg-3">
-            {fmtDateTime(call.started_at)} · {fmtDuration(call.duration_sec)} · {fmtPhone(call.direction === "inbound" ? call.from_number : call.to_number)}
+            <Time value={call.started_at} format="datetime" /> · {fmtDuration(call.duration_sec)} · {fmtPhone(call.direction === "inbound" ? call.from_number : call.to_number)}
           </div>
         </div>
         <Button size="xs" variant="ghost" icon={Pencil} onClick={() => setEditing(true)}>Outcome</Button>

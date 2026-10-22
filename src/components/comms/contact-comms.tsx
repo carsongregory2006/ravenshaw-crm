@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MessageSquare, Mail, Phone, AlertTriangle, PenSquare } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ function Warning({ text }: { text: string }) {
 }
 
 function SmsTab({ contact }: { contact: Contact }) {
-  const { messages, loading } = useContactMessages(contact.id, "sms");
+  const { messages, loading, reload } = useContactMessages(contact.id, "sms");
   const scrollRef = useAutoScroll(messages.length);
   const reason = smsBlockReason(contact);
   return (
@@ -46,13 +46,13 @@ function SmsTab({ contact }: { contact: Contact }) {
           : messages.length === 0 ? <EmptyState icon={MessageSquare} title="No texts yet" description={`Start the conversation with ${contactLabel(contact)}.`} />
           : messages.map((m) => <SmsBubble key={m.id} m={m} />)}
       </div>
-      <SmsComposer contactId={contact.id} disabledReason={reason} />
+      <SmsComposer contactId={contact.id} disabledReason={reason} onSettled={reload} />
     </div>
   );
 }
 
 function EmailTab({ contact }: { contact: Contact }) {
-  const { messages, loading } = useContactMessages(contact.id, "email");
+  const { messages, loading, reload } = useContactMessages(contact.id, "email");
   const [compose, setCompose] = useState<{ subject: string } | null>(null);
   const reason = emailBlockReason(contact);
   const sorted = [...messages].reverse();
@@ -69,7 +69,7 @@ function EmailTab({ contact }: { contact: Contact }) {
           : sorted.map((m, i) => <EmailItem key={m.id} m={m} defaultOpen={i === 0} onReply={reason ? undefined : (x) => setCompose({ subject: replySubject(x.subject) })} />)}
       </div>
       {compose && contact.email && (
-        <EmailComposerDialog open onOpenChange={(o) => !o && setCompose(null)} contactId={contact.id} to={contact.email} initialSubject={compose.subject} />
+        <EmailComposerDialog open onOpenChange={(o) => !o && setCompose(null)} contactId={contact.id} to={contact.email} initialSubject={compose.subject} onSettled={reload} />
       )}
     </div>
   );
@@ -86,8 +86,9 @@ function CallsTab({ contact }: { contact: Contact }) {
 }
 
 /** SMS / Email / Calls for one contact. Rendered on the person record page. */
-export function ContactComms({ contact }: { contact: Contact }) {
-  const [tab, setTab] = useState<"sms" | "email" | "calls">("sms");
+export function ContactComms({ contact, focus }: { contact: Contact; focus?: { channel: "sms" | "email" | "calls"; n: number } }) {
+  const [tab, setTab] = useState<"sms" | "email" | "calls">(focus?.channel ?? "sms");
+  useEffect(() => { if (focus) setTab(focus.channel); }, [focus]);
   return (
     <div className="flex flex-col">
       <Tabs

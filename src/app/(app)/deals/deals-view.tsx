@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -85,7 +86,7 @@ export function DealsView({ deals: initial, stages, users, openNew, initialView 
     { id: "mrr", header: "MRR", icon: Repeat, width: 100, align: "right", sortValue: (d) => Number(d.amount_recurring), cell: (d) => money(d.amount_recurring) },
     { id: "owner", header: "Owner", icon: UserCheck, width: 150, cell: (d) => { const u = d.owner_id ? userMap.get(d.owner_id) : null; return u ? <span className="inline-flex items-center gap-1.5"><Avatar name={u.full_name || u.email} src={u.avatar_url} size={16} />{u.full_name || u.email}</span> : null; } },
     { id: "close", header: "Expected close", icon: CalendarClock, width: 130, sortValue: (d) => d.expected_close_date ?? "", cell: (d) => (d.expected_close_date ? fmtDate(d.expected_close_date) : "") },
-    { id: "created", header: "Created", icon: CalendarPlus, width: 120, sortValue: (d) => d.created_at, cell: (d) => fmtDate(d.created_at) },
+    { id: "created", header: "Created", icon: CalendarPlus, width: 120, sortValue: (d) => d.created_at, cell: (d) => <Time value={d.created_at} format="date" /> },
   ];
 
   const openPipeline = filtered.filter((d) => { const s = stages.find((x) => x.id === d.stage_id); return s && !s.is_won && !s.is_lost; });
@@ -126,8 +127,8 @@ export function DealsView({ deals: initial, stages, users, openNew, initialView 
             empty={<EmptyState icon={Target} title="No deals" action={<Button variant="primary" icon={Plus} onClick={() => setNewOpen(true)}>New deal</Button>} />} />
         </PageBody>
       ) : (
-        <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setDragging(deals.find((d) => d.id === e.active.id) ?? null)} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
-          <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto p-3">
+        <DndContext id="deals-board" sensors={sensors} onDragStart={(e: DragStartEvent) => setDragging(deals.find((d) => d.id === e.active.id) ?? null)} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
+          <div className="flex min-h-0 flex-1 select-none gap-2 overflow-x-auto p-3">
             {stages.map((s) => {
               const items = filtered.filter((d) => d.stage_id === s.id);
               const one = items.reduce((a, d) => a + Number(d.amount_one_time), 0);

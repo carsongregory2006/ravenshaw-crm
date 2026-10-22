@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { Bell, CheckCheck } from "lucide-react";
@@ -56,7 +57,7 @@ export function NotificationsPanel({ open, onOpenChange, state }: { open: boolea
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-medium">{n.title}</div>
                   {n.body && <div className="mt-0.5 line-clamp-2 text-xs text-fg-2">{n.body}</div>}
-                  <div className="mt-1 text-xs text-fg-4">{timeAgo(n.created_at)}</div>
+                  <div className="mt-1 text-xs text-fg-4"><Time value={n.created_at} /></div>
                 </div>
               </div>
             );

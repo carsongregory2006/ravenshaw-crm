@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ClientOnly } from "@/components/ui/client-only";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { integrations } from "@/lib/env";
@@ -31,6 +32,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const sorted = ((calendars ?? []) as CalendarRow[]).sort((a, b) => order(a) - order(b));
 
   return (
+    <ClientOnly>
     <CalendarApp
       me={me}
       initialCalendars={sorted}
@@ -38,5 +40,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       google={{ configured: integrations.google(), connected: !!acct, email: acct?.email ?? null }}
       initial={{ date: sp.date, view: sp.view, event: sp.event, google: sp.google, create: sp.new === "1" }}
     />
+    </ClientOnly>
   );
 }

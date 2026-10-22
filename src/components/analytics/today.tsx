@@ -1,6 +1,7 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, CheckSquare, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -38,7 +39,7 @@ export function TodayTasks({ tasks }: { tasks: TodayTask[] }) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px]">{t.title}</div>
                   <div className="text-xs text-fg-3">
-                    {t.due_at && <span className={overdue ? "text-danger" : ""}>{overdue ? "Overdue · " : ""}{format(new Date(t.due_at), "MMM d, h:mm a")}</span>}
+                    {t.due_at && <span className={overdue ? "text-danger" : ""}>{overdue ? "Overdue · " : ""}<Time value={t.due_at} format="datetime" title={false} /></span>}
                     {t.contact_id && t.contact_name && <> · <Link className="hover:underline" href={`/contacts/${t.contact_id}`}>{t.contact_name}</Link></>}
                   </div>
                 </div>
@@ -53,6 +54,9 @@ export function TodayTasks({ tasks }: { tasks: TodayTask[] }) {
 }
 
 export function UpcomingEvents({ events }: { events: UpcomingEvent[] }) {
+  // times are formatted in the viewer's timezone, so only after mount (server renders in UTC)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const day = (d: Date) => (isToday(d) ? "Today" : isTomorrow(d) ? "Tomorrow" : format(d, "EEE, MMM d"));
   return (
     <Card title={<span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4 text-fg-3" />Upcoming</span>}
@@ -66,7 +70,7 @@ export function UpcomingEvents({ events }: { events: UpcomingEvent[] }) {
                 <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: e.color || "var(--accent)" }} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px]">{e.title}</div>
-                  <div className="text-xs text-fg-3">{day(s)} · {e.all_day ? "All day" : `${format(s, "h:mm a")} – ${format(new Date(e.end_at), "h:mm a")}`}</div>
+                  <div className="text-xs text-fg-3" suppressHydrationWarning>{!mounted ? "\u00a0" : <>{day(s)} · {e.all_day ? "All day" : `${format(s, "h:mm a")} – ${format(new Date(e.end_at), "h:mm a")}`}</>}</div>
                 </div>
                 {e.meeting_url && <a href={e.meeting_url} target="_blank" rel="noreferrer"><Button size="xs">Join</Button></a>}
               </li>

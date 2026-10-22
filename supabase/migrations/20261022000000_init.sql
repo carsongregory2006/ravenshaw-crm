@@ -818,7 +818,11 @@ create policy "run logs read" on automation_run_logs for select to authenticated
 create policy "views" on saved_views for all to authenticated using (user_id = auth.uid() or user_id is null) with check (user_id = auth.uid());
 
 -- ───────────────────────── Realtime ─────────────────────────
-alter publication supabase_realtime add table messages, calls, notifications, activities;
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table messages, calls, notifications, activities;
+  end if;
+end $$;
 
 -- ───────────────────────── Scheduler ─────────────────────────
 -- After deploy, run once (SQL editor) or via the Settings → System page:

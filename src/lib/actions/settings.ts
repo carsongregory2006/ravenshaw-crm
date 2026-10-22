@@ -93,6 +93,8 @@ export async function inviteMember(input: { email: string; full_name: string; ro
       await db.from("profiles").update({
         full_name: input.full_name || null,
         role: input.role,
+        is_active: true,
+        available_for_rr: true,
         commission_rate_setup: input.setup,
         commission_rate_recurring: input.recurring,
         commission_recurring_months: input.months,

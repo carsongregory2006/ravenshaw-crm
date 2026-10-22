@@ -175,6 +175,14 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [onCallUpdate]);
 
+  // Esc closes the dial pad when no call is in progress.
+  useEffect(() => {
+    if (!panel) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !callRef.current && !wrapup) setPanel(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panel, wrapup]);
+
   // Restore "online" preference so inbound calls ring in this browser.
   useEffect(() => {
     let pref = false;
@@ -273,7 +281,8 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
       {children}
       <audio id="dialer-remote-audio" autoPlay playsInline className="hidden" />
 
-      {!panel && (
+      {/* Idle: opened from the sidebar "Phone" item. Floats only while ringing or on a call. */}
+      {!panel && (inCall || phase === "incoming") && (
         <button
           onClick={() => setPanel(true)}
           className={cn("fixed bottom-5 right-5 z-40 flex size-11 items-center justify-center rounded-full shadow-lg cursor-pointer transition-colors",

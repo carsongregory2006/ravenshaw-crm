@@ -16,6 +16,7 @@ async function telnyx<T = unknown>(path: string, init: RequestInit = {}): Promis
 }
 
 export async function sendSms(input: { to: string; text: string; from?: string; mediaUrls?: string[] }) {
+  need("TELNYX_API_KEY", "Telnyx");
   const from = input.from || process.env.TELNYX_FROM_NUMBER;
   if (!from) throw new Error("No SMS from-number. Set TELNYX_FROM_NUMBER or Settings → SMS from number.");
   const data = await telnyx<{ data: { id: string } }>("/messages", {

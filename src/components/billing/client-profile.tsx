@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -108,7 +109,7 @@ export function ClientProfile(props: {
               <FieldRow icon={Calendar} label="Start date">
                 {canManage ? <Input type="date" className="h-7" defaultValue={client.start_date} onBlur={(e) => e.target.value && e.target.value !== client.start_date && run(updateClient(client.id, { start_date: e.target.value }), "Start date updated", refresh)} /> : fmtDate(client.start_date)}
               </FieldRow>
-              {client.status === "churned" && <FieldRow icon={UserX} label="Churned">{fmtDate(client.churned_at)}{client.churn_reason && <span className="text-fg-3"> · {client.churn_reason}</span>}</FieldRow>}
+              {client.status === "churned" && <FieldRow icon={UserX} label="Churned"><Time value={client.churned_at} format="date" />{client.churn_reason && <span className="text-fg-3"> · {client.churn_reason}</span>}</FieldRow>}
             </div>
             <Link href={`/contacts/${contact.id}`} className="mt-3 inline-flex items-center gap-1 text-[13px] text-accent hover:underline">Open full contact profile <ExternalLink className="size-3" /></Link>
 
@@ -147,7 +148,7 @@ export function ClientProfile(props: {
                         {payments.map((p) => (
                           <li key={p.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
                             <Wallet className="size-4 text-success" />
-                            <span className="flex-1">{fmtDate(p.received_at)} <span className="text-fg-3">· {p.method ?? "—"}{p.note ? ` · ${p.note}` : ""}</span></span>
+                            <span className="flex-1"><Time value={p.received_at} format="date" /> <span className="text-fg-3">· {p.method ?? "—"}{p.note ? ` · ${p.note}` : ""}</span></span>
                             <Tag color={p.kind === "recurring" ? "purple" : p.kind === "milestone" ? "orange" : "blue"}>{p.kind.replace("_", "-")}</Tag>
                             <span className="w-24 text-right font-medium tabular-nums">{money(p.amount, { cents: true })}</span>
                           </li>
@@ -159,7 +160,7 @@ export function ClientProfile(props: {
                     {contract ? (
                       <div className="flex flex-wrap items-center gap-2 text-[13px]">
                         <span className="font-medium">{contract.name}</span><StatusTag status={contract.status} />
-                        {contract.completed_at && <span className="text-fg-3">signed {fmtDate(contract.completed_at)}</span>}
+                        {contract.completed_at && <span className="text-fg-3">signed <Time value={contract.completed_at} format="date" /></span>}
                         {contract.document_url && <Button size="xs" icon={ExternalLink} className="ml-auto" onClick={() => window.open(contract.document_url!, "_blank")}>Open in PandaDoc</Button>}
                       </div>
                     ) : <p className="text-[13px] text-fg-3">No contract on file.</p>}
@@ -173,7 +174,7 @@ export function ClientProfile(props: {
                     {activities.map((a) => (
                       <li key={a.id} className="mb-4">
                         <span className="absolute -left-[5px] mt-1.5 size-2.5 rounded-full border-2 border-bg bg-border-strong" />
-                        <div className="flex items-baseline gap-2 text-[13px]"><span className="font-medium">{a.title}</span><span className="text-xs text-fg-4" title={fmtDateTime(a.created_at)}>{timeAgo(a.created_at)}</span></div>
+                        <div className="flex items-baseline gap-2 text-[13px]"><span className="font-medium">{a.title}</span><Time value={a.created_at} className="text-xs text-fg-4" /></div>
                         {a.body && <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-xs text-fg-2">{a.body}</p>}
                       </li>
                     ))}

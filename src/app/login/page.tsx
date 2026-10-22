@@ -51,7 +51,7 @@ function LoginForm() {
         <div className="mb-6 flex flex-col items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-lg bg-fg text-lg font-bold text-bg">R</span>
           <h1 className="text-lg font-semibold">{mode === "signup" ? "Create your account" : "Welcome to Ravenshaw AI"}</h1>
-          {params.get("deactivated") && <p className="text-xs text-danger">Your account has been deactivated.</p>}
+          {params.get("deactivated") && <p className="text-center text-xs text-danger">Your account isn&apos;t active. A workspace admin needs to approve it in Settings → Team.</p>}
         </div>
         {sent ? (
           <div className="rounded-lg border border-border bg-bg p-4 text-center text-[13px] text-fg-2">
@@ -76,7 +76,7 @@ function LoginForm() {
             </div>
           </form>
         )}
-        <p className="mt-4 text-center text-xs text-fg-4">The first account created becomes the workspace admin.</p>
+        <p className="mt-4 text-center text-xs text-fg-4">The first account becomes the workspace admin. Teammates should use their invite link; other sign-ups wait for admin approval.</p>
       </div>
     </div>
   );

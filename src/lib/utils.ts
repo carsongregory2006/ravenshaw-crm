@@ -37,13 +37,23 @@ export function contactLabel(c?: { first_name?: string | null; last_name?: strin
 
 export function initials(name?: string | null) {
   if (!name) return "?";
+  if (!/[a-z]/i.test(name)) return "#"; // phone numbers etc.
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
 }
 
+/** Parses YYYY-MM-DD as a local calendar date (not UTC midnight, which shifts a day west of UTC). */
+export function parseDate(d: string | Date) {
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const [y, m, day] = d.split("-").map(Number);
+    return new Date(y, m - 1, day);
+  }
+  return new Date(d);
+}
+
 export function fmtDate(d?: string | Date | null, f = "MMM d, yyyy") {
   if (!d) return "—";
-  return format(new Date(d), f);
+  return format(parseDate(d), f);
 }
 
 export function fmtDateTime(d?: string | Date | null) {
@@ -81,12 +91,14 @@ export function fmtPhone(phone?: string | null) {
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
 }
 
-/** Replace {{first_name}}-style merge tags. */
+/** Replace {{first_name}}-style merge tags. `{{first_name|there}}` falls back to "there" when empty. */
 export function renderTemplate(tpl: string, vars: Record<string, unknown>) {
-  return tpl.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key: string) => {
+  const out = tpl.replace(/\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g, (_, key: string, fallback?: string) => {
     const v = key.split(".").reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), vars);
-    return v == null ? "" : String(v);
+    return v == null || v === "" ? (fallback ?? "").trim() : String(v);
   });
+  // tidy greetings left dangling by an empty name: "Hey ," → "Hey,"
+  return out.replace(/ +([,!.?])/g, "$1");
 }
 
 export function slugify(s: string) {

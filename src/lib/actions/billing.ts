@@ -163,6 +163,8 @@ export async function retryInvoice(invoiceId: string) {
     await staff();
     const inv = await retryInvoiceLib(invoiceId);
     refresh(inv.deal_id, inv.client_id);
+    // pushToMercury records failures on the row instead of throwing; surface them to the user.
+    if (inv.status === "error") throw new Error(inv.error || "Invoice could not be sent");
     return inv;
   });
 }

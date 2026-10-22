@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -92,19 +93,19 @@ export function Inbox() {
               <Search className="absolute left-2 top-2 size-4 text-fg-4" />
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search conversations" className="pl-7" />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-0.5">
               {(["all", "sms", "email"] as const).map((c) => (
-                <button key={c} onClick={() => setChannel(c)} className={cn("h-6 rounded-md px-2 text-xs cursor-pointer", channel === c ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover")}>
+                <button key={c} onClick={() => setChannel(c)} className={cn("h-6 rounded-md px-1.5 text-xs cursor-pointer", channel === c ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover")}>
                   {c === "all" ? "All" : c === "sms" ? "SMS" : "Email"}
                 </button>
               ))}
-              <span className="mx-1 h-4 w-px bg-border" />
+              <span className="mx-0.5 h-4 w-px bg-border" />
               {(["all", "mine"] as const).map((s) => (
-                <button key={s} onClick={() => setScope(s)} className={cn("h-6 rounded-md px-2 text-xs cursor-pointer", scope === s ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover")}>
+                <button key={s} onClick={() => setScope(s)} className={cn("h-6 rounded-md px-1.5 text-xs cursor-pointer", scope === s ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover")}>
                   {s === "all" ? "Everyone" : "Mine"}
                 </button>
               ))}
-              <button onClick={() => setUnreadOnly(!unreadOnly)} className={cn("ml-auto h-6 rounded-md px-2 text-xs cursor-pointer", unreadOnly ? "bg-accent-soft font-medium text-accent" : "text-fg-3 hover:bg-hover")}>Unread</button>
+              <button onClick={() => setUnreadOnly(!unreadOnly)} className={cn("ml-auto h-6 rounded-md px-1.5 text-xs cursor-pointer", unreadOnly ? "bg-accent-soft font-medium text-accent" : "text-fg-3 hover:bg-hover")}>Unread</button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -117,7 +118,7 @@ export function Inbox() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
                       <span className={cn("truncate text-[13px]", c.unread ? "font-semibold" : "font-medium")}>{contactLabel(c.contact)}</span>
-                      <span className="ml-auto shrink-0 text-[11px] text-fg-4">{feedTime(c.last.created_at)}</span>
+                      <span className="ml-auto shrink-0 text-[11px] text-fg-4"><Time value={c.last.created_at} format="feed" /></span>
                     </div>
                     <div className="flex items-center gap-1">
                       {c.last.channel === "sms" ? <MessageSquare className="size-3 shrink-0 text-fg-4" /> : <Mail className="size-3 shrink-0 text-fg-4" />}
@@ -132,7 +133,7 @@ export function Inbox() {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          {selectedId ? <Conversation key={selectedId} contactId={selectedId} /> : (
+          {selectedId ? <Conversation key={selectedId} contactId={selectedId} onRead={(id) => setRows((rs) => rs.map((r) => (r.contact?.id === id && r.direction === "inbound" && !r.read_at ? { ...r, read_at: new Date().toISOString() } : r)))} /> : (
             <EmptyState icon={MessagesSquare} title="Select a conversation" description="Pick a conversation on the left, or start a new one." className="h-full"
               action={<Button icon={PenSquare} onClick={() => setNewOpen(true)}>New message</Button>} />
           )}
@@ -143,7 +144,7 @@ export function Inbox() {
   );
 }
 
-function Conversation({ contactId }: { contactId: string }) {
+function Conversation({ contactId, onRead }: { contactId: string; onRead?: (contactId: string) => void }) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [missing, setMissing] = useState(false);
   const { messages, loading } = useContactMessages(contactId);
@@ -169,8 +170,8 @@ function Conversation({ contactId }: { contactId: string }) {
 
   const unreadCount = messages.filter((m) => m.direction === "inbound" && !m.read_at).length;
   useEffect(() => {
-    if (unreadCount > 0) markConversationReadAction(contactId);
-  }, [contactId, unreadCount]);
+    if (unreadCount > 0) markConversationReadAction(contactId).then(() => onRead?.(contactId));
+  }, [contactId, unreadCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (missing) return <EmptyState title="Contact not found" description="It may have been deleted or you don't have access." className="h-full" />;
   if (!contact) return <div className="flex h-full items-center justify-center"><Spinner /></div>;

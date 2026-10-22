@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -113,8 +114,8 @@ export function DealRecord({ deal: d, items, stages, activities, currentUserId }
           <FieldRow icon={Repeat} label="Term (months)"><InlineText type="number" value={d.term_months} onSave={(v) => save({ term_months: Number(v) || null })} /></FieldRow>
           <FieldRow icon={Globe} label="Source"><InlineText value={d.source} onSave={(v) => save({ source: v || null })} /></FieldRow>
           {stage?.is_lost && <FieldRow icon={XCircle} label="Lost reason"><InlineText value={d.lost_reason} onSave={(v) => save({ lost_reason: v || null })} /></FieldRow>}
-          <FieldRow icon={CalendarPlus} label="Created">{fmtDateTime(d.created_at)}</FieldRow>
-          <FieldRow icon={Clock} label="Closed">{d.closed_at ? fmtDateTime(d.closed_at) : <span className="text-fg-4">Open</span>}</FieldRow>
+          <FieldRow icon={CalendarPlus} label="Created"><Time value={d.created_at} format="datetime" /></FieldRow>
+          <FieldRow icon={Clock} label="Closed">{d.closed_at ? <Time value={d.closed_at} format="datetime" /> : <span className="text-fg-4">Open</span>}</FieldRow>
           <FieldRow icon={StickyNote} label="Notes"><InlineText multiline value={d.notes} onSave={(v) => save({ notes: v || null })} /></FieldRow>
 
           {d.contact && (

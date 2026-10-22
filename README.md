@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ravenshaw AI CRM
 
-## Getting Started
+The operating system for Ravenshaw AI: leads → booked calls → 1-click contracts → automated invoicing → commissions → P&L.
+Next.js 15 (App Router) on **Vercel**, **Supabase** (Postgres, Auth, RLS, Realtime, pg_cron), AI through **OpenRouter**.
+UI modeled on [Twenty](https://github.com/twentyhq/twenty) with light/dark themes.
 
-First, run the development server:
+## What's inside
+
+| Area | Where | Highlights |
+|---|---|---|
+| Dashboard | `/dashboard` | Cash, MRR, net profit, EBITDA, pipeline, win rate, AR; revenue vs expenses; Ask-AI + weekly AI briefing |
+| People / Companies | `/contacts`, `/companies` | Twenty-style tables, filters, bulk actions, CSV import/export, inline-editable record pages, AI overview |
+| Deals | `/deals` | Kanban + table, deal numbers (`RAV-1001`), line items (one-time / recurring / milestone), 1-click PandaDoc contract, invoices |
+| Clients & Onboarding | `/clients`, `/onboarding` | MRR/LTV/health, onboarding checklists, billing schedules |
+| Inbox | `/inbox` | Unified SMS + email threads (Telnyx + Resend), realtime |
+| Dialer | floating phone button | Telnyx WebRTC browser calling, inbound ringing, dispositions, recordings, AI call summaries |
+| Calendar | `/calendar` | Google Calendar clone (day/week/month/year/schedule/4-day), 2-way Google sync, Calendly bookings |
+| Landing pages | `/landing-pages`, public `/p/<slug>` | Section builder, A/B variants with weights & significance, per-page weighted round robin |
+| Automations | `/automations` | n8n-style builder; SMS/email/wait/condition/CRM/AI/webhook nodes; executions log |
+| Analytics | `/analytics` | Sales funnel, rep leaderboard, marketing attribution/ROAS, MRR movement, cohorts, activity |
+| Finance | `/finance/*` | Cash-basis P&L, EBITDA, runway, AR aging, invoices, expenses + Mercury categorization rules, commission ledger & payouts |
+| Settings | `/settings` | Team & roles & commission rates, pipeline, templates, integrations (test buttons), scheduler, webhook log |
+
+**Roles:** `admin` (everything; the first account created — later self-signups wait for admin approval in Settings → Team, invited members are active immediately), `ops` (everything except admin settings), `sales_rep` (only their own leads/deals/commissions — enforced by Postgres RLS).
+
+**Signed contract flow (PandaDoc `document.completed`):** deal → Won, contact → client, client + onboarding checklist created,
+recurring billing schedules created, first Mercury invoice sent (one-time items + first period of recurring + undated milestones),
+team notified, `contract_signed` automations fire (e.g. onboarding welcome sequence).
+
+**Commissions:** % of cash collected, per rep (`setup` rate for one-time/milestone, `recurring` rate with optional month cap), accrued when a payment lands.
+
+## Local development
 
 ```bash
+cp .env.example .env.local   # fill in Supabase + any integrations you want to test
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Apply `supabase/migrations/*.sql` in order to your Supabase project (SQL editor, `supabase db push`, or `node scripts/deploy.mjs`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy (automated)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# .env.production.local holds integration keys (see .env.example); Supabase keys are filled in automatically
+SUPABASE_ACCESS_TOKEN=sbp_... SUPABASE_ORG_ID=... VERCEL_TOKEN=... node scripts/deploy.mjs
+```
 
-## Learn More
+Creates the Supabase project, runs migrations, creates the Vercel project, sets env vars, deploys, sets auth redirect URLs
+and enables the per-minute scheduler (`pg_cron` → `/api/cron/tick`). Re-runnable (state in `.deploy-state.json`).
 
-To learn more about Next.js, take a look at the following resources:
+## Integration setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+All webhook URLs are also shown (with copy buttons) in **Settings → Integrations**. `APP` = your production URL.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Mercury (payments)
+1. Mercury → Settings → API tokens → create a token (read + write; invoicing requires a Mercury plan with Invoicing). Set `MERCURY_API_KEY`.
+2. Set `MERCURY_ACCOUNT_ID` to the checking account that receives payments (Settings → Integrations → Mercury → *Load accounts* shows IDs).
+3. Optional webhook: `APP/api/webhooks/mercury?secret=<CRON_SECRET>`. Without it, the scheduler polls Mercury every 15 minutes.
+4. Recurring invoices are generated by the CRM scheduler (Mercury's API has no invoice series). Endpoint paths live in `src/lib/integrations/mercury.ts`.
 
-## Deploy on Vercel
+### Telnyx (SMS + calling)
+1. Buy a number; create a **Messaging Profile** with webhook `APP/api/webhooks/telnyx`; assign the number. Set `TELNYX_API_KEY`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_FROM_NUMBER`.
+2. Calling: create a **Credential Connection** (SIP) with webhook `APP/api/webhooks/telnyx`, assign the number to it (so inbound calls ring the browser), create a **Telephony Credential** on it → `TELNYX_CONNECTION_ID`, `TELNYX_CREDENTIAL_ID`. Enable call recording on the connection for recordings.
+3. Portal → Keys & Credentials → Public Key → `TELNYX_PUBLIC_KEY` (webhook signature verification).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Resend (email)
+1. Verify your sending domain; set `RESEND_API_KEY`, `RESEND_FROM_EMAIL`.
+2. Webhooks → `APP/api/webhooks/resend` with events `email.delivered/opened/clicked/bounced/complained` and `email.received` (inbound). Copy the signing secret → `RESEND_WEBHOOK_SECRET`.
+3. Inbound replies: enable Resend receiving on a (sub)domain and set `RESEND_REPLY_TO` to an address on it.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Calendly (bookings)
+1. Integrations → API & Webhooks → personal access token → `CALENDLY_API_TOKEN`; choose a signing key → `CALENDLY_WEBHOOK_SIGNING_KEY`.
+2. Settings → Integrations → Calendly → **Register webhook**, then pick the default booking & onboarding links.
+3. Landing pages embed Calendly with `utm_content=<contact id>` so bookings attach to the right lead and move the deal to *Booked*.
+
+### PandaDoc (contracts)
+1. Settings → API → key → `PANDADOC_API_KEY`. Webhook → `APP/api/webhooks/pandadoc` (event: document state changed) with a shared key → `PANDADOC_WEBHOOK_KEY`.
+2. Template requirements: a recipient role named **Client**, a pricing table named **Pricing Table 1**, and any of these variables:
+   `Client.FirstName`, `Client.LastName`, `Client.Email`, `Client.Company`, `Deal.Number`, `Deal.SetupTotal`, `Deal.MonthlyTotal`, `Deal.Term`, `Agency.Name`, `Date`.
+3. Settings → Integrations → PandaDoc → *Load templates* → choose the default.
+
+### OpenRouter (AI)
+`OPENROUTER_API_KEY`. Model is set in Settings → General (default `anthropic/claude-sonnet-4.5`).
+
+### Google Calendar (2-way sync)
+1. Google Cloud Console → enable **Google Calendar API** → OAuth consent screen → OAuth client (Web).
+2. Authorized redirect URI: `APP/api/integrations/google/callback`. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+3. Each user clicks **Connect Google Calendar** in the calendar sidebar.
+
+### Scheduler
+`CRON_SECRET` protects `/api/cron/tick` (automations, recurring invoices, overdue marking, Mercury sync, Google sync, reminders).
+Enable it from **Settings → System → Enable scheduler** (or the deploy script). Vercel Cron also calls it daily as a fallback.

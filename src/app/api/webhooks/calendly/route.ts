@@ -58,7 +58,7 @@ function phoneFrom(inv: Invitee) {
   return qa?.answer ?? null;
 }
 
-async function resolveContact(db: Db, inv: Invitee): Promise<Contact> {
+async function resolveContact(db: Db, inv: Invitee, hostEmails: string[] = []): Promise<Contact> {
   const tr = inv.tracking ?? {};
   const hint = tr.utm_content || tr.salesforce_uuid;
   if (hint && UUID.test(hint)) {
@@ -79,7 +79,13 @@ async function resolveContact(db: Db, inv: Invitee): Promise<Contact> {
     return { ...found, ...patch } as Contact;
   }
   const n = splitName(inv);
-  const { data: owner } = await db.rpc("rr_next_rep", { p_page_id: null });
+  // The Calendly host owns the lead when they're a CRM user; otherwise use the global round robin.
+  let owner: string | null = null;
+  if (hostEmails.length) {
+    const { data: host } = await db.from("profiles").select("id").in("email", hostEmails).eq("is_active", true).limit(1).maybeSingle();
+    owner = (host?.id as string | undefined) ?? null;
+  }
+  if (!owner) owner = ((await db.rpc("rr_next_rep", { p_page_id: null })).data as string | null) ?? null;
   const { data, error } = await db.from("contacts").insert({
     first_name: n.first,
     last_name: n.last,
@@ -87,7 +93,7 @@ async function resolveContact(db: Db, inv: Invitee): Promise<Contact> {
     phone: toE164(phone),
     source: "calendly",
     status: "lead",
-    owner_id: (owner as string | null) ?? null,
+    owner_id: owner,
     utm_source: tr.utm_source ?? null,
     utm_medium: tr.utm_medium ?? null,
     utm_campaign: tr.utm_campaign ?? null,
@@ -146,7 +152,7 @@ async function loadScheduledEvent(inv: Invitee): Promise<ScheduledEvent | null> 
 async function onCreated(db: Db, inv: Invitee) {
   const se = await loadScheduledEvent(inv);
   if (!se) throw new Error("Missing scheduled_event");
-  const contact = await resolveContact(db, inv);
+  const contact = await resolveContact(db, inv, (se.event_memberships ?? []).map((m) => m.user_email).filter(Boolean) as string[]);
   const calendarId = await ensureCalendlyCalendar(db);
   const dealId = await ensureBookedDeal(db, contact, se.name);
   const displayName = inv.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || inv.email;

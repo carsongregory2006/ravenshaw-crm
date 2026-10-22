@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import { useEffect, useRef, useState } from "react";
 import { Send, Sparkles, Mail, ChevronDown, ChevronRight, Reply, AlertCircle, Eye, MousePointerClick } from "lucide-react";
 import { toast } from "sonner";
@@ -11,8 +12,8 @@ import { cn, feedTime, fmtDateTime } from "@/lib/utils";
 import { MergeTagMenu, SaveTemplateButton, TemplatePicker } from "./templates";
 import type { Message } from "@/lib/types";
 
-export function EmailComposer({ contactId, to, initialSubject = "", onSent, onCancel, compact }: {
-  contactId: string; to: string; initialSubject?: string; onSent?: () => void; onCancel?: () => void; compact?: boolean;
+export function EmailComposer({ contactId, to, initialSubject = "", onSent, onSettled, onCancel, compact }: {
+  contactId: string; to: string; initialSubject?: string; onSent?: () => void; onSettled?: () => void; onCancel?: () => void; compact?: boolean;
 }) {
   const [subject, setSubject] = useState(initialSubject);
   const [body, setBody] = useState("");
@@ -32,6 +33,7 @@ export function EmailComposer({ contactId, to, initialSubject = "", onSent, onCa
     setSending(true);
     const r = await sendEmailAction(contactId, subject, body);
     setSending(false);
+    onSettled?.();
     if (!r.ok) return toast.error(r.error);
     toast.success("Email sent");
     setBody("");
@@ -77,11 +79,11 @@ export function EmailComposer({ contactId, to, initialSubject = "", onSent, onCa
   );
 }
 
-export function EmailComposerDialog({ open, onOpenChange, contactId, to, initialSubject }: { open: boolean; onOpenChange: (o: boolean) => void; contactId: string; to: string; initialSubject?: string }) {
+export function EmailComposerDialog({ open, onOpenChange, contactId, to, initialSubject, onSettled }: { open: boolean; onOpenChange: (o: boolean) => void; contactId: string; to: string; initialSubject?: string; onSettled?: () => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="New email" size="lg">
       <div className="pb-2">
-        <EmailComposer contactId={contactId} to={to} initialSubject={initialSubject} onSent={() => onOpenChange(false)} onCancel={() => onOpenChange(false)} />
+        <EmailComposer contactId={contactId} to={to} initialSubject={initialSubject} onSettled={onSettled} onSent={() => onOpenChange(false)} onCancel={() => onOpenChange(false)} />
       </div>
     </Dialog>
   );
@@ -108,14 +110,14 @@ export function EmailItem({ m, onReply, defaultOpen }: { m: Message; onReply?: (
           </div>
           {!open && <div className="truncate text-xs text-fg-3">{out ? "You" : m.from_addr}: {m.body}</div>}
         </div>
-        <span className="shrink-0 text-xs text-fg-4" title={fmtDateTime(m.created_at)}>{feedTime(m.created_at)}</span>
+        <span className="shrink-0 text-xs text-fg-4"><Time value={m.created_at} format="feed" /></span>
       </button>
       {open && (
         <div className="border-t border-border-light px-3 py-2">
           <div className="mb-2 text-xs text-fg-3">
             <div>From: {m.from_addr}</div>
             <div>To: {m.to_addr}</div>
-            <div>{fmtDateTime(m.created_at)}</div>
+            <div><Time value={m.created_at} format="datetime" /></div>
             {m.error && <div className="text-danger">Error: {m.error}</div>}
           </div>
           <div className="whitespace-pre-wrap text-[13px] leading-relaxed">{m.body}</div>

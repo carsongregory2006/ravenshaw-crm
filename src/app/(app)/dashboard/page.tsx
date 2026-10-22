@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Supabase join rows and recharts render props are untyped */
+import { Greeting } from "@/components/ui/greeting";
 import Link from "next/link";
 import { endOfDay, format, startOfMonth, subMonths, addDays } from "date-fns";
 import {
@@ -52,7 +53,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const salesPrev = salesMetrics(ds, range.prevFrom, range.prevTo, owner);
   const months = monthsBetween(startOfMonth(subMonths(now, 11)), now, 12);
   const ar = arAging(ds.invoices);
-  const pipe = pipelineByStage(ds, owner).filter((s) => s.key !== "won");
+  // Only stages that hold deals; label carries the count so $0 deals are still visible.
+  const pipe = pipelineByStage(ds, owner).filter((s) => s.key !== "won" && s.count > 0).map((s) => ({ ...s, stage: `${s.stage} (${s.count})` }));
   const sources = leadSources(owner ? ds.contacts.filter((c) => c.owner_id === owner) : ds.contacts, range.from, range.to);
   const rangeQ = { range: sp.range, from: sp.from, to: sp.to };
   const aiReady = integrations.openrouter();
@@ -103,9 +105,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <Page>
       <PageHeader icon={LayoutDashboard} title="Dashboard"
         actions={<RangePicker value={range.key} label={range.label} from={format(range.from, "yyyy-MM-dd")} to={format(range.to, "yyyy-MM-dd")} />}>
-        <span className="text-xs text-fg-3">Good {now.getHours() < 12 ? "morning" : now.getHours() < 18 ? "afternoon" : "evening"}, {profile.full_name?.split(" ")[0] ?? ""}</span>
+        <span className="text-xs text-fg-3"><Greeting name={profile.full_name?.split(" ")[0]} /></span>
       </PageHeader>
       <PageBody className="space-y-3 p-3">
+        {sp.denied && (
+          <div className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-[13px] text-fg">
+            That page is only available to admins and ops. Ask an admin if you need access.
+          </div>
+        )}
         {kpis}
         <div className="grid gap-3 lg:grid-cols-3">
           <div className="space-y-3 lg:col-span-2">

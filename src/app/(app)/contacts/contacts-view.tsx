@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -99,8 +100,8 @@ export function ContactsView({ contacts, users, openNew, initialStatus }: { cont
     ) : <span className="text-fg-4">Unassigned</span> },
     { id: "source", header: "Source", icon: Globe, width: 120, sortValue: (c) => c.source, cell: (c) => c.source },
     { id: "tags", header: "Tags", icon: TagIcon, width: 180, cell: (c) => <span className="flex gap-1">{(c.tags ?? []).slice(0, 3).map((t) => <Tag key={t} color="blue">{t}</Tag>)}{(c.tags?.length ?? 0) > 3 && <span className="text-xs text-fg-3">+{c.tags.length - 3}</span>}</span> },
-    { id: "last", header: "Last contacted", icon: Clock, width: 130, sortValue: (c) => c.last_contacted_at ?? "", cell: (c) => c.last_contacted_at ? feedTime(c.last_contacted_at) : <span className="text-fg-4">Never</span> },
-    { id: "created", header: "Created", icon: CalendarPlus, width: 120, sortValue: (c) => c.created_at, cell: (c) => fmtDate(c.created_at) },
+    { id: "last", header: "Last contacted", icon: Clock, width: 130, sortValue: (c) => c.last_contacted_at ?? "", cell: (c) => c.last_contacted_at ? <Time value={c.last_contacted_at} format="feed" /> : <span className="text-fg-4">Never</span> },
+    { id: "created", header: "Created", icon: CalendarPlus, width: 120, sortValue: (c) => c.created_at, cell: (c) => <Time value={c.created_at} format="date" /> },
   ];
 
   return (

@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { FileText, Mail, MessageSquare, Pencil, Plus, Trash2 } from "lucide-react";
@@ -74,7 +75,7 @@ export function TemplateSettings({ templates }: { templates: Template[] }) {
                     {t.subject && <div className="truncate text-xs text-fg-2">{t.subject}</div>}
                     <div className="line-clamp-2 text-xs text-fg-3">{t.body}</div>
                   </div>
-                  <span className="shrink-0 text-xs text-fg-4">{timeAgo(t.created_at)}</span>
+                  <span className="shrink-0 text-xs text-fg-4"><Time value={t.created_at} /></span>
                   <Button size="xs" variant="ghost" icon={Pencil} aria-label="Edit" onClick={() => setDraft({ id: t.id, channel: t.channel, name: t.name, subject: t.subject ?? "", body: t.body })} />
                   <Button size="xs" variant="ghost" icon={Trash2} aria-label="Delete" onClick={() => remove(t)} />
                 </li>

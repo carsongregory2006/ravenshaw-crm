@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -109,7 +110,7 @@ export function TasksList({ filter, scope: initialScope, showScopeToggle, autoOp
                       <button className="min-w-0 flex-1 text-left cursor-pointer" onClick={() => setEditing(t)}>
                         <div className={cn("truncate text-[13px]", t.completed_at && "text-fg-3 line-through")}>{t.title}</div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-fg-3">
-                          {t.due_at && <span className={cn("inline-flex items-center gap-1", !t.completed_at && isBefore(new Date(t.due_at), new Date()) && "text-danger")}><CalendarClock className="size-3" />{fmtDateTime(t.due_at)}</span>}
+                          {t.due_at && <span className={cn("inline-flex items-center gap-1", !t.completed_at && isBefore(new Date(t.due_at), new Date()) && "text-danger")}><CalendarClock className="size-3" /><Time value={t.due_at} format="datetime" /></span>}
                           {t.contact && !filter?.contact_id && <Link onClick={(e) => e.stopPropagation()} href={`/contacts/${t.contact.id}`} className="inline-flex items-center gap-1 hover:text-fg"><User className="size-3" />{contactLabel(t.contact)}</Link>}
                           {t.deal && !filter?.deal_id && <Link onClick={(e) => e.stopPropagation()} href={`/deals/${t.deal.id}`} className="inline-flex items-center gap-1 hover:text-fg"><Target className="size-3" />{t.deal.deal_number}</Link>}
                         </div>

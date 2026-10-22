@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -50,6 +51,8 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
   const { contact: c, deals, stages } = data;
   const name = contactLabel(c);
   const [tab, setTab] = React.useState(initialTab ?? "timeline");
+  const [commsFocus, setCommsFocus] = React.useState<{ channel: "sms" | "email" | "calls"; n: number } | undefined>();
+  const openComms = (channel: "sms" | "email") => { setCommsFocus((f) => ({ channel, n: (f?.n ?? 0) + 1 })); setTab("comms"); };
   const [dealOpen, setDealOpen] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [draftOpen, setDraftOpen] = React.useState(false);
@@ -95,7 +98,7 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
             <Avatar name={name} size={56} />
             <div className="text-base font-semibold">{name}</div>
             <div className="text-xs text-fg-3">
-              {[c.title, c.company?.name].filter(Boolean).join(" at ") || "No title"} · Added {timeAgo(c.created_at)}
+              {[c.title, c.company?.name].filter(Boolean).join(" at ") || "No title"} · Added <Time value={c.created_at} />
             </div>
             <div className="flex flex-wrap justify-center gap-1">
               <Tag color={STATUS_COLORS[c.status]}>{CONTACT_STATUSES.find((s) => s.value === c.status)?.label}</Tag>
@@ -104,8 +107,8 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
             </div>
             <div className="mt-2 grid w-full grid-cols-5 gap-1">
               <QuickAction icon={PhoneCall} label="Call" onClick={() => c.phone ? call({ phone: c.phone, contactId: c.id, name }) : toast.error("Add a phone number first")} />
-              <QuickAction icon={MessageSquare} label="Text" onClick={() => c.phone ? setTab("comms") : toast.error("Add a phone number first")} />
-              <QuickAction icon={Mail} label="Email" onClick={() => c.email ? setTab("comms") : toast.error("Add an email first")} />
+              <QuickAction icon={MessageSquare} label="Text" onClick={() => c.phone ? openComms("sms") : toast.error("Add a phone number first")} />
+              <QuickAction icon={Mail} label="Email" onClick={() => c.email ? openComms("email") : toast.error("Add an email first")} />
               <BookAction link={bookingLink} contactId={c.id} canText={!!c.phone} canEmail={!!c.email} />
               <QuickAction icon={Target} label="Deal" onClick={() => setDealOpen(true)} />
             </div>
@@ -132,8 +135,8 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
             {data.landingPage && (
               <FieldRow icon={FileText} label="Landing page"><Link href={`/landing-pages/${data.landingPage.id}`} className="text-accent hover:underline">{data.landingPage.name}</Link></FieldRow>
             )}
-            <FieldRow icon={Clock} label="Last contacted">{c.last_contacted_at ? fmtDateTime(c.last_contacted_at) : <span className="text-fg-4">Never</span>}</FieldRow>
-            <FieldRow icon={CalendarPlus} label="Created">{fmtDateTime(c.created_at)}</FieldRow>
+            <FieldRow icon={Clock} label="Last contacted">{c.last_contacted_at ? <Time value={c.last_contacted_at} format="datetime" /> : <span className="text-fg-4">Never</span>}</FieldRow>
+            <FieldRow icon={CalendarPlus} label="Created"><Time value={c.created_at} format="datetime" /></FieldRow>
           </div>
 
           <div className="border-t border-border-light px-4 py-3">
@@ -165,7 +168,7 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
           ]} />
           <div className="flex-1">
             {tab === "timeline" && <Timeline activities={data.activities} target={{ contact_id: c.id }} currentUserId={currentUserId} />}
-            {tab === "comms" && <ContactComms contact={c} />}
+            {tab === "comms" && <ContactComms contact={c} focus={commsFocus} />}
             {tab === "deals" && (
               <div className="p-4">
                 <div className="mb-3 flex justify-end"><Button size="sm" icon={Plus} onClick={() => setDealOpen(true)}>New deal</Button></div>
@@ -302,7 +305,7 @@ function AiOverview({ contactId, summary, at, onDraft, onExpand }: { contactId: 
       <div className="flex items-center gap-2">
         <Sparkles className="size-4 text-accent" />
         <span className="text-[13px] font-medium">AI Overview</span>
-        {at && <span className="text-xs text-fg-3">· {timeAgo(at)}</span>}
+        {at && <span className="text-xs text-fg-3">· <Time value={at} /></span>}
         <div className="ml-auto flex gap-1">
           <Button size="xs" variant="ghost" icon={Wand2} onClick={onDraft}>Draft follow-up</Button>
           <Button size="xs" variant="ghost" icon={RefreshCw} loading={busy} onClick={run}>{summary ? "Refresh" : "Generate"}</Button>
@@ -326,7 +329,7 @@ function AiFull({ contactId, summary, at, onDraft }: { contactId: string; summar
   return (
     <div className="p-4">
       <div className="mb-3 flex items-center gap-2">
-        <span className="text-xs text-fg-3">{at ? `Generated ${fmtDate(at, "MMM d, yyyy h:mm a")}` : "Not generated yet"}</span>
+        <span className="text-xs text-fg-3">{at ? <>Generated <Time value={at} format="datetime" /></> : "Not generated yet"}</span>
         <div className="ml-auto flex gap-1.5">
           <Button size="sm" icon={Wand2} onClick={onDraft}>Draft follow-up</Button>
           <Button size="sm" variant="primary" icon={RefreshCw} loading={busy} onClick={run}>{summary ? "Regenerate" : "Generate overview"}</Button>

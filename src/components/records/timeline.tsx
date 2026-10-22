@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -106,7 +107,7 @@ export function Timeline({ activities, target, currentUserId }: {
                       <div className="flex items-center gap-1.5 text-[13px]">
                         {a.actor?.full_name && <><Avatar name={a.actor.full_name} src={a.actor.avatar_url} size={14} /><span className="font-medium">{a.actor.full_name}</span></>}
                         <span className={cn("truncate", a.actor?.full_name ? "text-fg-2" : "text-fg")}>{a.type === "note" ? "added a note" : a.title}</span>
-                        <span className="ml-auto shrink-0 text-xs text-fg-4" title={fmtDateTime(a.created_at)}>{timeAgo(a.created_at)}</span>
+                        <span className="ml-auto shrink-0 text-xs text-fg-4"><Time value={a.created_at} /></span>
                         {(a.type === "note" && a.actor_id === currentUserId) && (
                           <button onClick={() => remove(a.id)} aria-label="Delete note" className="hidden rounded-sm p-0.5 text-fg-4 hover:text-danger group-hover:block cursor-pointer">
                             <Trash2 className="size-3.5" />

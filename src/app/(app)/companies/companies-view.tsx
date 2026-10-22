@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -46,7 +47,7 @@ export function CompaniesView({ companies, users, openNew }: { companies: Compan
     { id: "people", header: "People", icon: User, width: 90, align: "right", sortValue: (c) => c.contacts?.[0]?.count ?? 0, cell: (c) => c.contacts?.[0]?.count ?? 0 },
     { id: "deals", header: "Deals", icon: Target, width: 90, align: "right", sortValue: (c) => c.deals?.[0]?.count ?? 0, cell: (c) => c.deals?.[0]?.count ?? 0 },
     { id: "owner", header: "Owner", icon: UserCheck, width: 150, cell: (c) => (c.owner_id ? <span className="inline-flex items-center gap-1.5"><Avatar name={userName.get(c.owner_id)} size={16} />{userName.get(c.owner_id)}</span> : null) },
-    { id: "created", header: "Created", icon: CalendarPlus, width: 120, sortValue: (c) => c.created_at, cell: (c) => fmtDate(c.created_at) },
+    { id: "created", header: "Created", icon: CalendarPlus, width: 120, sortValue: (c) => c.created_at, cell: (c) => <Time value={c.created_at} format="date" /> },
   ];
 
   return (

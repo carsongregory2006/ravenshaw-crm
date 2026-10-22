@@ -4,7 +4,7 @@ import type { PlClass } from "@/lib/types";
 import { monthKey, monthsBetween } from "./range";
 
 // ───────── Row shapes (subset of columns we load) ─────────
-export interface PaymentRow { id: string; amount: number; kind: string; received_at: string; client_id: string | null; deal_id: string | null; contact_id: string | null }
+export interface PaymentRow { id: string; amount: number; kind: string; recurring_amount?: number | null; received_at: string; client_id: string | null; deal_id: string | null; contact_id: string | null }
 export interface InvoiceRow { id: string; invoice_number: string; amount: number; status: string; due_date: string | null; issued_at: string | null; paid_at: string | null; client_id: string | null; contact_id: string | null; created_at: string }
 export interface ExpenseRow { id: string; date: string; amount: number; pl_class: PlClass; category: string | null; vendor: string | null }
 export interface CommissionRow { id: string; rep_id: string; amount: number; status: string; created_at: string; basis: string; deal_id: string | null; base_amount: number }
@@ -80,7 +80,7 @@ export function pnl(ds: Pick<Dataset, "payments" | "expenses" | "commissions">, 
   const exps = ds.expenses.filter((e) => within(e.date, from, to));
   const comm = ds.commissions.filter((c) => c.status !== "clawed_back" && within(c.created_at, from, to));
   const revenue = sumBy(pays, (p) => n(p.amount));
-  const revenueRecurring = sumBy(pays.filter((p) => p.kind === "recurring"), (p) => n(p.amount));
+  const revenueRecurring = sumBy(pays, (p) => (p.recurring_amount != null ? n(p.recurring_amount) : p.kind === "recurring" ? n(p.amount) : 0));
   const byClass = (cls: string) => sumBy(exps.filter((e) => e.pl_class === cls), (e) => n(e.amount));
   const cogs = byClass("cogs");
   const commissions = sumBy(comm, (c) => n(c.amount));

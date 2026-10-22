@@ -1,4 +1,5 @@
 "use client";
+import { Time } from "@/components/ui/time";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -116,7 +117,7 @@ export function CommissionsView({ rows, payouts, reps, isAdmin, isStaff }: { row
           <DataTable className="flex-1" rows={filtered} selectable={isAdmin} selected={sel} onSelectedChange={setSel}
             empty={<EmptyState icon={Banknote} title="No commissions in this view" description="Commissions accrue when a client payment is recorded, using each rep's rates from Settings → Team." />}
             columns={[
-              { id: "date", header: "Date", width: 104, sortValue: (r) => r.created_at, cell: (r) => fmtDate(r.created_at) },
+              { id: "date", header: "Date", width: 104, sortValue: (r) => r.created_at, cell: (r) => <Time value={r.created_at} format="date" /> },
               { id: "rep", header: "Rep", sortValue: (r) => r.rep_name, cell: (r) => <span className="inline-flex items-center gap-1.5"><Avatar name={r.rep_name} size={16} />{r.rep_name}</span> },
               { id: "client", header: "Client", sortValue: (r) => r.client_name ?? "", cell: (r) => r.client_name ?? "—" },
               { id: "deal", header: "Deal", width: 96, cell: (r) => (r.deal_id ? <Link className="font-mono text-xs hover:underline" href={`/deals/${r.deal_id}`}>{r.deal_number}</Link> : "—") },
@@ -137,7 +138,7 @@ export function CommissionsView({ rows, payouts, reps, isAdmin, isStaff }: { row
       {tab === "payouts" && (
         <DataTable className="flex-1" rows={payouts} empty={<EmptyState icon={Banknote} title="No payouts recorded" />}
           columns={[
-            { id: "date", header: "Paid", width: 110, sortValue: (r) => r.paid_at, cell: (r) => fmtDate(r.paid_at) },
+            { id: "date", header: "Paid", width: 110, sortValue: (r) => r.paid_at, cell: (r) => <Time value={r.paid_at} format="date" /> },
             { id: "rep", header: "Rep", sortValue: (r) => r.rep_name, cell: (r) => r.rep_name },
             { id: "count", header: "Commissions", align: "right", cell: (r) => r.count },
             { id: "method", header: "Method", cell: (r) => r.method ?? "—" },

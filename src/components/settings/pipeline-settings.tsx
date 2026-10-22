@@ -90,7 +90,7 @@ export function PipelineSettings({ stages: initial, counts }: { stages: Pipeline
       <PageTitle title="Pipeline" description="Deal stages shown on the Deals board, in order." />
       <Section title="Stages" description="Drag to reorder. Probability drives the weighted pipeline forecast. Won and Lost are fixed and close the deal.">
         <div className="overflow-hidden rounded-lg border border-border">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <DndContext id="pipeline-stages" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={open.map((s) => s.id)} strategy={verticalListSortingStrategy}>
               {open.map((s) => <StageRow key={s.id + s.name + s.color + s.probability} stage={s} count={counts[s.id] ?? 0} />)}
             </SortableContext>
