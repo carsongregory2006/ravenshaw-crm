@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fmt, Sparkline, type Fmt } from "./viz";
+import { Sparkline } from "./viz";
+import { fmt, type Fmt } from "./format";
 
 /** Stat tile: label · value · delta vs previous period (colored by whether up is good) · optional sparkline. */
 export function Kpi({ label, value, f = "money", prev, upIsGood = true, icon: Icon, hint, spark, className }: {

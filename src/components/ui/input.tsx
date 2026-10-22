@@ -26,10 +26,19 @@ export function Label({ className, ...p }: React.LabelHTMLAttributes<HTMLLabelEl
 }
 
 export function Field({ label, hint, children, className }: { label: string; hint?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  const autoId = React.useId();
+  // Link the label to a single form-control child so clicks and screen readers work.
+  let control = children;
+  let htmlFor: string | undefined;
+  if (React.isValidElement<{ id?: string }>(children) && typeof children.type === "string" || (React.isValidElement(children) && [Input, Textarea, Select].includes(children.type as never))) {
+    const el = children as React.ReactElement<{ id?: string }>;
+    htmlFor = el.props.id ?? autoId;
+    control = React.cloneElement(el, { id: htmlFor });
+  }
   return (
     <div className={cn("space-y-1", className)}>
-      <Label>{label}</Label>
-      {children}
+      <Label htmlFor={htmlFor}>{label}</Label>
+      {control}
       {hint && <p className="text-xs text-fg-3">{hint}</p>}
     </div>
   );

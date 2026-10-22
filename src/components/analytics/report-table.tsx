@@ -2,7 +2,7 @@
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/misc";
 import { CsvButton } from "./csv";
-import { fmt, type Fmt } from "./viz";
+import { fmt, type Fmt } from "./format";
 
 export interface ReportCol { key: string; header: string; f?: Fmt; width?: number }
 

@@ -1,7 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { CsvButton } from "./csv";
-import { fmt } from "./viz";
+import { fmt } from "./format";
 
 export interface PnlColumn { label: string; values: Record<string, number | null>; emphasis?: boolean }
 export interface PnlLine { key: string; label: string; kind?: "money" | "pct"; bold?: boolean; indent?: boolean; negative?: boolean; separator?: boolean }
