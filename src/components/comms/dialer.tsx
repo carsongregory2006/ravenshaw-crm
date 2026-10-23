@@ -352,7 +352,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
               <Button variant="primary" size="md" icon={Phone} className="mt-3 w-full bg-success hover:bg-success hover:opacity-90" disabled={!number || status === "unavailable"} onClick={() => call({ phone: number })}>
                 Call
               </Button>
-              {status === "unavailable" && <p className="mt-2 text-center text-xs text-fg-3">Add TELNYX_API_KEY and TELNYX_CREDENTIAL_ID to enable calling.</p>}
+              {status === "unavailable" && <p className="mt-2 text-center text-xs text-fg-3">Add TELNYX_API_KEY and TELNYX_CONNECTION_ID to enable calling.</p>}
             </div>
           )}
         </div>

@@ -33,10 +33,47 @@ export async function sendSms(input: { to: string; text: string; from?: string; 
   return { id: data.data.id };
 }
 
+const CREDENTIAL_KV_KEY = "telnyx_telephony_credential";
+
+/**
+ * Telephony credential used to mint browser dialer tokens. Uses TELNYX_CREDENTIAL_ID if set; otherwise
+ * creates one on the TELNYX_CONNECTION_ID connection the first time it's needed and stores its id in app_kv.
+ */
+async function telephonyCredentialId(opts: { forceNew?: boolean } = {}): Promise<string> {
+  if (process.env.TELNYX_CREDENTIAL_ID && !opts.forceNew) return process.env.TELNYX_CREDENTIAL_ID;
+  const connectionId = need("TELNYX_CONNECTION_ID", "Telnyx Voice");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const db = createAdminClient();
+
+  if (!opts.forceNew) {
+    const { data } = await db.from("app_kv").select("value").eq("key", CREDENTIAL_KV_KEY).maybeSingle();
+    const stored = data?.value as { id?: string; connection_id?: string } | undefined;
+    if (stored?.id && stored.connection_id === connectionId) return stored.id;
+  }
+
+  const created = await telnyx<{ data: { id: string } }>("/telephony_credentials", {
+    method: "POST",
+    body: JSON.stringify({ connection_id: connectionId, name: "ravenshaw-crm-dialer" }),
+  });
+  await db.from("app_kv").upsert({
+    key: CREDENTIAL_KV_KEY,
+    value: { id: created.data.id, connection_id: connectionId },
+    updated_at: new Date().toISOString(),
+  });
+  return created.data.id;
+}
+
 /** Short-lived JWT for the browser WebRTC client (@telnyx/webrtc login_token). */
 export async function createWebRtcToken(): Promise<string> {
-  const credId = need("TELNYX_CREDENTIAL_ID", "Telnyx Voice");
-  return telnyx<string>(`/telephony_credentials/${credId}/token`, { method: "POST" });
+  const credId = await telephonyCredentialId();
+  try {
+    return await telnyx<string>(`/telephony_credentials/${credId}/token`, { method: "POST" });
+  } catch (e) {
+    // A stored credential that was deleted/expired in Telnyx: mint a fresh one once.
+    if (process.env.TELNYX_CREDENTIAL_ID || !/Telnyx (404|410|422)/.test(String(e))) throw e;
+    const fresh = await telephonyCredentialId({ forceNew: true });
+    return telnyx<string>(`/telephony_credentials/${fresh}/token`, { method: "POST" });
+  }
 }
 
 /** Verify Telnyx webhook (ed25519). Public key from Telnyx portal → Keys & Credentials → Public Key. */

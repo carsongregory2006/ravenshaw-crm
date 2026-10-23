@@ -61,7 +61,7 @@ All webhook URLs are also shown (with copy buttons) in **Settings → Integratio
 
 ### Telnyx (SMS + calling)
 1. Buy a number; create a **Messaging Profile** with webhook `APP/api/webhooks/telnyx`; assign the number. Set `TELNYX_API_KEY`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_FROM_NUMBER`.
-2. Calling: create a **Credential Connection** (SIP) with webhook `APP/api/webhooks/telnyx`, assign the number to it (so inbound calls ring the browser), create a **Telephony Credential** on it → `TELNYX_CONNECTION_ID`, `TELNYX_CREDENTIAL_ID`. Enable call recording on the connection for recordings.
+2. Calling: create a **Credential Connection** (SIP) with webhook `APP/api/webhooks/telnyx`, assign the number to it (so inbound calls ring the browser), and set its ID as `TELNYX_CONNECTION_ID`. The CRM creates the telephony credential for browser calling automatically on first use (optional override: `TELNYX_CREDENTIAL_ID`). Enable call recording on the connection for recordings.
 3. Portal → Keys & Credentials → Public Key → `TELNYX_PUBLIC_KEY` (webhook signature verification).
 
 ### Resend (email)
