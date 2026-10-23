@@ -2,6 +2,7 @@ import "server-only";
 import { addDays, format } from "date-fns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createCustomer, createInvoice, findCustomerByEmail, cancelInvoice, invoicePaymentUrl } from "@/lib/integrations/mercury";
+import * as stripe from "@/lib/integrations/stripe";
 import { integrations } from "@/lib/env";
 import { logActivity } from "@/lib/activity";
 import { sendEmailToContact } from "@/lib/comms";
@@ -52,14 +53,35 @@ async function ensureMercuryCustomer(contactId: string, clientId?: string | null
   return id;
 }
 
-/** Push an existing invoice row to Mercury (create invoice + email). Updates the row with result or error. */
-async function pushToMercury(invoiceId: string): Promise<Invoice> {
+/** Ensures a Stripe customer exists for the contact; caches the id on the client record. */
+async function ensureStripeCustomer(contactId: string, clientId?: string | null): Promise<string> {
   const db = createAdminClient();
-  const { data: inv } = await db.from("invoices").select("*").eq("id", invoiceId).single();
-  if (!inv) throw new Error("Invoice not found");
-  const lineItems = await loadInvoiceLines(inv as Invoice);
-  try {
-    if (!integrations.mercury()) throw new Error("Mercury is not configured (MERCURY_API_KEY missing)");
+  if (clientId) {
+    const { data: client } = await db.from("clients").select("stripe_customer_id").eq("id", clientId).single();
+    if (client?.stripe_customer_id) return client.stripe_customer_id;
+  }
+  const { data: contact } = await db.from("contacts").select("*, company:companies(name)").eq("id", contactId).single();
+  if (!contact?.email) throw new Error("Contact needs an email address to receive a Stripe invoice");
+  const id = await stripe.findOrCreateCustomer({ email: contact.email, name: contact.company?.name || contactLabel(contact), contactId });
+  if (clientId) await db.from("clients").update({ stripe_customer_id: id }).eq("id", clientId);
+  return id;
+}
+
+/** Send through Stripe when configured (preferred), otherwise Mercury. Returns the hosted payment URL. */
+async function sendViaProvider(inv: Invoice, lineItems: { name: string; unitPrice: number; quantity: number }[]) {
+  if (integrations.stripe()) {
+    if (!inv.contact_id) throw new Error("Invoice has no contact");
+    const db = createAdminClient();
+    const customerId = inv.stripe_customer_id || (await ensureStripeCustomer(inv.contact_id, inv.client_id));
+    const { data: ws } = await db.from("workspace_settings").select("currency").eq("id", 1).single();
+    const daysUntilDue = inv.due_date ? Math.max(0, Math.round((new Date(inv.due_date).getTime() - Date.now()) / 86_400_000)) : 7;
+    const s = await stripe.createAndSendInvoice({
+      crmInvoiceId: inv.id, invoiceNumber: inv.invoice_number, customerId, currency: ws?.currency || "CAD", daysUntilDue,
+      lineItems, description: inv.description ?? undefined,
+    });
+    return { payment_url: s.hosted_invoice_url ?? null, fields: { stripe_invoice_id: s.id, stripe_customer_id: customerId } };
+  }
+  if (integrations.mercury()) {
     if (!inv.contact_id) throw new Error("Invoice has no contact");
     const customerId = inv.mercury_customer_id || (await ensureMercuryCustomer(inv.contact_id, inv.client_id));
     const m = await createInvoice({
@@ -71,15 +93,27 @@ async function pushToMercury(invoiceId: string): Promise<Invoice> {
       payerMemo: inv.description ?? undefined,
       sendEmailOption: "SendNow",
     });
-    const payment_url = invoicePaymentUrl(m);
+    return { payment_url: invoicePaymentUrl(m), fields: { mercury_invoice_id: m.id, mercury_customer_id: customerId } };
+  }
+  throw new Error("No payment provider configured. Add STRIPE_SECRET_KEY in Vercel.");
+}
+
+/** Push an existing invoice row to Stripe/Mercury (create invoice + email). Updates the row with result or error. */
+async function pushInvoice(invoiceId: string): Promise<Invoice> {
+  const db = createAdminClient();
+  const { data: inv } = await db.from("invoices").select("*").eq("id", invoiceId).single();
+  if (!inv) throw new Error("Invoice not found");
+  const lineItems = await loadInvoiceLines(inv as Invoice);
+  try {
+    const { payment_url, fields } = await sendViaProvider(inv as Invoice, lineItems);
     const { data: updated } = await db.from("invoices").update({
-      mercury_invoice_id: m.id, mercury_customer_id: customerId, payment_url, status: "sent", error: null, issued_at: new Date().toISOString(),
+      ...fields, payment_url, status: "sent", error: null, issued_at: new Date().toISOString(),
     }).eq("id", invoiceId).select("*").single();
     await logActivity({ type: "invoice", title: `Invoice ${inv.invoice_number} sent (${money(inv.amount, { cents: true })})`, contact_id: inv.contact_id, deal_id: inv.deal_id, client_id: inv.client_id, metadata: { invoice_id: inv.id } });
     if (payment_url && inv.contact_id) {
-      // Mercury emails the invoice too; this branded note makes sure the payment link lands from us as well.
+      // The provider emails the invoice too; this branded note makes sure the payment link lands from us as well.
       await sendEmailToContact(inv.contact_id, `Invoice ${inv.invoice_number} from {{agency_name}}`,
-        `Hi {{first_name}},\n\nYour invoice ${inv.invoice_number} for ${money(inv.amount, { cents: true })} is ready${inv.due_date ? ` and due ${inv.due_date}` : ""}.\n\nPay securely by ACH or card here: ${payment_url}\n\n${lineItems.map((l) => `• ${l.name} — ${money(l.unitPrice * l.quantity, { cents: true })}`).join("\n")}\n\nThank you!\n{{agency_name}}`,
+        `Hi {{first_name}},\n\nYour invoice ${inv.invoice_number} for ${money(inv.amount, { cents: true })} is ready${inv.due_date ? ` and due ${inv.due_date}` : ""}.\n\nPay securely online here: ${payment_url}\n\n${lineItems.map((l) => `• ${l.name} — ${money(l.unitPrice * l.quantity, { cents: true })}`).join("\n")}\n\nThank you!\n{{agency_name}}`,
       ).catch(() => null);
     }
     return updated as Invoice;
@@ -100,7 +134,7 @@ async function loadInvoiceLines(inv: Invoice) {
   return [{ name: inv.description || `Invoice ${inv.invoice_number}`, unitPrice: Number(inv.amount), quantity: 1 }];
 }
 
-/** Create an invoice in the CRM and send it through Mercury. Never throws for Mercury failures: the row is kept with status=error. */
+/** Create an invoice in the CRM and send it through Stripe (or Mercury). Never throws for provider failures: the row is kept with status=error. */
 export async function issueInvoice(input: IssueInvoiceInput): Promise<Invoice> {
   const db = createAdminClient();
   const items = input.items.filter((i) => Number(i.amount) * (i.qty ?? 1) !== 0);
@@ -134,7 +168,7 @@ export async function issueInvoice(input: IssueInvoiceInput): Promise<Invoice> {
   }).select("*").single();
   if (error || !inv) throw new Error(error?.message ?? "Could not create invoice");
   await db.from("app_kv").upsert({ key: `invoice_lines:${inv.id}`, value: { items }, updated_at: new Date().toISOString() });
-  return pushToMercury(inv.id);
+  return pushInvoice(inv.id);
 }
 
 export async function retryInvoice(invoiceId: string) {
@@ -142,7 +176,7 @@ export async function retryInvoice(invoiceId: string) {
   const { data: inv } = await db.from("invoices").select("status").eq("id", invoiceId).single();
   if (!inv) throw new Error("Invoice not found");
   if (inv.status === "paid" || inv.status === "void") throw new Error(`Invoice is already ${inv.status}`);
-  return pushToMercury(invoiceId);
+  return pushInvoice(invoiceId);
 }
 
 export async function voidInvoice(invoiceId: string, actorId?: string | null) {
@@ -150,6 +184,7 @@ export async function voidInvoice(invoiceId: string, actorId?: string | null) {
   const { data: inv } = await db.from("invoices").select("*").eq("id", invoiceId).single();
   if (!inv) throw new Error("Invoice not found");
   if (inv.status === "paid") throw new Error("Paid invoices can't be voided");
+  if (inv.stripe_invoice_id && integrations.stripe()) await stripe.voidInvoice(inv.stripe_invoice_id);
   if (inv.mercury_invoice_id && integrations.mercury()) await cancelInvoice(inv.mercury_invoice_id);
   await db.from("invoices").update({ status: "void" }).eq("id", invoiceId);
   await logActivity({ type: "invoice", title: `Invoice ${inv.invoice_number} voided`, contact_id: inv.contact_id, deal_id: inv.deal_id, client_id: inv.client_id, actor_id: actorId ?? null });

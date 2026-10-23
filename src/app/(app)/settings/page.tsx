@@ -67,7 +67,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   } else if (tab === "integrations") {
     const hook = (p: string) => appUrl(`/api/webhooks/${p}`);
     const list: IntegrationInfo[] = [
-      { key: "mercury", name: "Mercury", purpose: "Invoices, payments & bank transactions", connected: integrations.mercury(), env: ["MERCURY_API_KEY", "MERCURY_ACCOUNT_ID"], webhook: `${hook("mercury")}?secret=<CRON_SECRET>` },
+      { key: "stripe", name: "Stripe", purpose: "Invoices & automatic payment matching", connected: integrations.stripe(), env: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"], webhook: hook("stripe"), extra: "Webhook events: invoice.paid, invoice.voided, invoice.payment_failed, invoice.marked_uncollectible" },
+      { key: "mercury", name: "Mercury (optional)", purpose: "Bank balance & transactions (US accounts only)", connected: integrations.mercury(), env: ["MERCURY_API_KEY", "MERCURY_ACCOUNT_ID"], webhook: `${hook("mercury")}?secret=<CRON_SECRET>` },
       { key: "telnyx", name: "Telnyx", purpose: "SMS and calling", connected: integrations.telnyx(), env: ["TELNYX_API_KEY", "TELNYX_FROM_NUMBER", "TELNYX_MESSAGING_PROFILE_ID", "TELNYX_PUBLIC_KEY", "TELNYX_CONNECTION_ID"], webhook: hook("telnyx"), extra: integrations.telnyxVoice() ? "Browser dialer ready" : "Add TELNYX_CONNECTION_ID to enable the browser dialer" },
       { key: "resend", name: "Resend", purpose: "Email sending, tracking & inbound replies", connected: integrations.resend(), env: ["RESEND_API_KEY", "RESEND_FROM_EMAIL", "RESEND_WEBHOOK_SECRET"], webhook: hook("resend") },
       { key: "calendly", name: "Calendly", purpose: "Bookings sync into the calendar & deals", connected: integrations.calendly(), env: ["CALENDLY_API_TOKEN", "CALENDLY_WEBHOOK_SIGNING_KEY"], webhook: hook("calendly") },
@@ -77,7 +78,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       { key: "supabase", name: "Supabase", purpose: "Database, auth & realtime", connected: integrations.supabase(), env: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] },
     ];
     const { data: g } = await sb.from("google_accounts").select("email").eq("user_id", profile.id).maybeSingle();
-    content = <IntegrationSettings integrations={list} settings={settings} googleEmail={g?.email ?? null} />;
+    content = <IntegrationSettings integrations={list} settings={settings} googleEmail={g?.email ?? null} defaultFromEmail={process.env.RESEND_FROM_EMAIL ?? null} />;
   } else if (tab === "system") {
     const db = createAdminClient();
     const [{ data: events }, { data: lastTick }] = await Promise.all([

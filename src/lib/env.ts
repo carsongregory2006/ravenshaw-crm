@@ -10,6 +10,7 @@ export const integrations = {
   calendly: () => !!process.env.CALENDLY_API_TOKEN,
   pandadoc: () => !!process.env.PANDADOC_API_KEY,
   mercury: () => !!process.env.MERCURY_API_KEY,
+  stripe: () => !!process.env.STRIPE_SECRET_KEY,
   google: () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
 };
 

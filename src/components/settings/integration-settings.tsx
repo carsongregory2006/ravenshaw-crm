@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, CheckCircle2, Circle, Copy, ExternalLink, Landmark, Mail, MessageSquare, Phone, Calendar, FileSignature, Sparkles, CalendarDays, Database, type LucideIcon } from "lucide-react";
+import { Check, CheckCircle2, Circle, Copy, CreditCard, ExternalLink, Landmark, Mail, MessageSquare, Phone, Calendar, FileSignature, Sparkles, CalendarDays, Database, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { Tag } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import type { WorkspaceSettings } from "@/lib/types";
 import { PageTitle, Section } from "./section";
 
 export interface IntegrationInfo {
-  key: "mercury" | "telnyx" | "resend" | "calendly" | "pandadoc" | "openrouter" | "google" | "supabase";
+  key: "stripe" | "mercury" | "telnyx" | "resend" | "calendly" | "pandadoc" | "openrouter" | "google" | "supabase";
   name: string;
   purpose: string;
   connected: boolean;
@@ -24,7 +24,7 @@ export interface IntegrationInfo {
 }
 
 const ICONS: Record<IntegrationInfo["key"], LucideIcon> = {
-  mercury: Landmark, telnyx: Phone, resend: Mail, calendly: Calendar, pandadoc: FileSignature, openrouter: Sparkles, google: CalendarDays, supabase: Database,
+  stripe: CreditCard, mercury: Landmark, telnyx: Phone, resend: Mail, calendly: Calendar, pandadoc: FileSignature, openrouter: Sparkles, google: CalendarDays, supabase: Database,
 };
 
 function CopyField({ label, value }: { label: string; value: string }) {
@@ -169,14 +169,14 @@ function GoogleActions({ email }: { email: string | null }) {
   );
 }
 
-function SenderSettings({ settings }: { settings: WorkspaceSettings }) {
+function SenderSettings({ settings, defaultFromEmail }: { settings: WorkspaceSettings; defaultFromEmail: string | null }) {
   const { busy, run } = useRun();
   const [f, setF] = useState({ email_from_name: settings.email_from_name ?? "", email_from_address: settings.email_from_address ?? "", sms_from_number: settings.sms_from_number ?? "" });
   return (
     <Section title="Senders" description="Who outbound email and SMS come from. Falls back to RESEND_FROM_EMAIL / TELNYX_FROM_NUMBER.">
       <div className="grid grid-cols-3 gap-3">
         <Field label="Email from name"><Input value={f.email_from_name} onChange={(e) => setF({ ...f, email_from_name: e.target.value })} placeholder="Ravenshaw AI" /></Field>
-        <Field label="Email from address" hint="Must be on a domain verified in Resend."><Input type="email" value={f.email_from_address} onChange={(e) => setF({ ...f, email_from_address: e.target.value })} placeholder="team@ravenshaw.ai" /></Field>
+        <Field label="Email from address" hint="Must be on a domain verified in Resend."><Input type="email" value={f.email_from_address} onChange={(e) => setF({ ...f, email_from_address: e.target.value })} placeholder={defaultFromEmail ? `${defaultFromEmail} (default from RESEND_FROM_EMAIL)` : "team@ravenshaw.ai"} /></Field>
         <Field label="SMS from number" hint="E.164, e.g. +15555550123"><Input value={f.sms_from_number} onChange={(e) => setF({ ...f, sms_from_number: e.target.value })} placeholder="+1…" /></Field>
       </div>
       <Button className="mt-3" variant="primary" loading={busy}
@@ -185,12 +185,12 @@ function SenderSettings({ settings }: { settings: WorkspaceSettings }) {
   );
 }
 
-export function IntegrationSettings({ integrations, settings, googleEmail }: { integrations: IntegrationInfo[]; settings: WorkspaceSettings; googleEmail: string | null }) {
+export function IntegrationSettings({ integrations, settings, googleEmail, defaultFromEmail }: { integrations: IntegrationInfo[]; settings: WorkspaceSettings; googleEmail: string | null; defaultFromEmail: string | null }) {
   const connected = integrations.filter((i) => i.connected).length;
   return (
     <>
       <PageTitle title="Integrations" description={`${connected} of ${integrations.length} connected. API keys live in Vercel → Project → Settings → Environment Variables; redeploy after changing them.`} />
-      <SenderSettings settings={settings} />
+      <SenderSettings settings={settings} defaultFromEmail={defaultFromEmail} />
       <Section title="Services">
         <div className="space-y-3">
           {integrations.map((i) => {

@@ -154,7 +154,7 @@ export function ClientProfile(props: {
                           </li>
                         ))}
                       </ul>
-                    ) : <p className="px-3 py-4 text-[13px] text-fg-3">No payments yet. Payments are matched from Mercury automatically.</p>}
+                    ) : <p className="px-3 py-4 text-[13px] text-fg-3">No payments yet. Stripe payments are matched automatically.</p>}
                   </Card>
                   <Card title={<span className="flex items-center gap-1.5"><FileSignature className="size-4 text-fg-3" /> Contract</span>}>
                     {contract ? (

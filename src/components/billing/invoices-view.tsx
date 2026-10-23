@@ -10,7 +10,7 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { Card, Stat } from "@/components/ui/misc";
 import { PageBody } from "@/components/ui/page";
 import { cn, money, timeAgo } from "@/lib/utils";
-import { syncMercuryNow } from "@/lib/actions/billing";
+import { syncStripeNow } from "@/lib/actions/billing";
 import { InvoiceTable, CreateInvoiceDialog } from "./invoice-ui";
 import type { Invoice } from "@/lib/types";
 
@@ -19,8 +19,8 @@ type ClientOption = { id: string; contactId: string; dealId: string | null; labe
 
 const STATUSES = ["all", "sent", "overdue", "paid", "error", "draft", "void"];
 
-export function InvoicesView({ rows, clients, lastSync, mercuryConfigured, initialStatus }: {
-  rows: InvoiceListRow[]; clients: ClientOption[]; lastSync: string | null; mercuryConfigured: boolean; initialStatus: string;
+export function InvoicesView({ rows, clients, lastSync, stripeConfigured, initialStatus }: {
+  rows: InvoiceListRow[]; clients: ClientOption[]; lastSync: string | null; stripeConfigured: boolean; initialStatus: string;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState(STATUSES.includes(initialStatus) ? initialStatus : "all");
@@ -43,12 +43,12 @@ export function InvoicesView({ rows, clients, lastSync, mercuryConfigured, initi
 
   const sync = async () => {
     setSyncing(true);
-    const r = await syncMercuryNow();
+    const r = await syncStripeNow();
     setSyncing(false);
     if (!r.ok) return toast.error(r.error);
     const s = r.data;
     if (s.errors.length) toast.warning(`Synced with issues: ${s.errors[0]}`);
-    else toast.success(`Mercury synced · ${s.transactions} txns, ${s.paymentsMatched + s.invoicesPaid} payments, ${s.expensesCreated} new expenses`);
+    else toast.success(`Stripe synced · ${s.checked} open invoices checked, ${s.invoicesPaid} newly paid`);
     router.refresh();
   };
 
@@ -76,8 +76,8 @@ export function InvoicesView({ rows, clients, lastSync, mercuryConfigured, initi
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search invoices" className="h-7 w-48 pl-7" />
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-fg-3">{mercuryConfigured ? (lastSync ? `Mercury synced ${timeAgo(lastSync)}` : "Mercury not synced yet") : "Mercury not configured"}</span>
-          <Button size="sm" icon={RefreshCw} loading={syncing} onClick={sync} disabled={!mercuryConfigured}>Sync Mercury now</Button>
+          <span className="text-xs text-fg-3">{stripeConfigured ? (lastSync ? `Stripe synced ${timeAgo(lastSync)}` : "Stripe not synced yet") : "Stripe not configured"}</span>
+          <Button size="sm" icon={RefreshCw} loading={syncing} onClick={sync} disabled={!stripeConfigured}>Sync Stripe now</Button>
           <Button size="sm" variant="primary" icon={Plus} onClick={() => setPicking(true)}>New invoice</Button>
         </div>
       </div>

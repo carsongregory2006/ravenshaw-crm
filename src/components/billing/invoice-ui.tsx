@@ -76,11 +76,11 @@ export function InvoiceTable({ invoices, canManage, onChange, showContact, compa
                       {canManage && (
                         <>
                           <MenuSeparator />
-                          <MenuItem icon={RotateCw} disabled={inv.status === "paid" || inv.status === "void"} onSelect={() => run(retryInvoice(inv.id), inv.status === "error" ? "Invoice re-sent" : "Invoice re-sent through Mercury", done)}>
-                            {inv.status === "error" ? "Retry sending" : "Resend via Mercury"}
+                          <MenuItem icon={RotateCw} disabled={inv.status === "paid" || inv.status === "void"} onSelect={() => run(retryInvoice(inv.id), inv.status === "error" ? "Invoice re-sent" : "Invoice re-sent through Stripe", done)}>
+                            {inv.status === "error" ? "Retry sending" : "Resend via Stripe"}
                           </MenuItem>
                           <MenuItem icon={CheckCircle2} disabled={inv.status === "paid" || inv.status === "void"} onSelect={() => setPaying(inv)}>Mark as paid…</MenuItem>
-                          <MenuItem icon={Ban} danger disabled={inv.status === "paid" || inv.status === "void"} onSelect={() => { if (confirm(`Void ${inv.invoice_number}? This also cancels it in Mercury.`)) run(voidInvoice(inv.id), "Invoice voided", done); }}>Void invoice</MenuItem>
+                          <MenuItem icon={Ban} danger disabled={inv.status === "paid" || inv.status === "void"} onSelect={() => { if (confirm(`Void ${inv.invoice_number}? This also voids it in Stripe.`)) run(voidInvoice(inv.id), "Invoice voided", done); }}>Void invoice</MenuItem>
                         </>
                       )}
                     </MenuContent>
@@ -99,7 +99,7 @@ export function InvoiceTable({ invoices, canManage, onChange, showContact, compa
 export function MarkPaidDialog({ invoice, onClose, onDone }: { invoice: Invoice; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState(String(invoice.amount));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [method, setMethod] = useState("ach");
+  const [method, setMethod] = useState("etransfer");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const submit = async () => {
@@ -109,15 +109,15 @@ export function MarkPaidDialog({ invoice, onClose, onDone }: { invoice: Invoice;
     if (r.ok) onClose();
   };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title={`Record payment · ${invoice.invoice_number}`} description="Use when money arrived outside Mercury invoicing. Rep commission is accrued on this cash." size="sm"
+    <Dialog open onOpenChange={(o) => !o && onClose()} title={`Record payment · ${invoice.invoice_number}`} description="Use when money arrived outside Stripe invoicing (e-Transfer, cheque, cash). Rep commission is accrued on this cash." size="sm"
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" loading={loading} onClick={submit}>Record payment</Button></>}>
       <div className="space-y-3">
         <Field label="Amount"><Input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
         <Field label="Received on"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Method">
           <Select value={method} onChange={(e) => setMethod(e.target.value)}>
-            <option value="ach">ACH / bank transfer</option><option value="wire">Wire</option><option value="card">Card</option>
-            <option value="check">Check</option><option value="mercury">Mercury invoice</option><option value="other">Other</option>
+            <option value="etransfer">Interac e-Transfer</option><option value="ach">Bank transfer / EFT</option><option value="wire">Wire</option><option value="card">Card</option>
+            <option value="check">Cheque</option><option value="stripe">Stripe</option><option value="other">Other</option>
           </Select>
         </Field>
         <Field label="Note"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" /></Field>
@@ -153,8 +153,8 @@ export function CreateInvoiceDialog({ open, onClose, contactId, dealId, clientId
     });
     setLoading(false);
     if (!r.ok) return toast.error(r.error);
-    if (r.data.status === "error") toast.warning(`Invoice ${r.data.invoice_number} saved but Mercury failed: ${r.data.error}`);
-    else toast.success(`Invoice ${r.data.invoice_number} sent via Mercury`);
+    if (r.data.status === "error") toast.warning(`Invoice ${r.data.invoice_number} saved but Stripe failed: ${r.data.error}`);
+    else toast.success(`Invoice ${r.data.invoice_number} sent via Stripe`);
     onDone();
     onClose();
   };
@@ -162,7 +162,7 @@ export function CreateInvoiceDialog({ open, onClose, contactId, dealId, clientId
   const updCustom = (i: number, patch: Partial<DraftLine>) => setCustom((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="Create invoice" description="Sends a Mercury invoice (ACH + card) to the client's email." size="lg"
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="Create invoice" description="Sends a Stripe invoice (card, bank debit) to the client's email." size="lg"
       footer={<><span className="mr-auto self-center text-[13px] text-fg-2">Total <b className="text-fg">{money(total, { cents: true })}</b></span><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" loading={loading} onClick={submit} disabled={!chosen.length}>Send invoice</Button></>}>
       <div className="space-y-4">
         {lines.length > 0 && (

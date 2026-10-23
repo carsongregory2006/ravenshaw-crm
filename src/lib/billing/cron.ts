@@ -6,6 +6,7 @@ import { notifyAdmins } from "@/lib/activity";
 import { getDocumentStatus, sendDocument } from "@/lib/integrations/pandadoc";
 import { issueInvoice } from "./invoices";
 import { syncMercury, lastMercurySync } from "./mercury-sync";
+import { syncStripe, lastStripeSync } from "./stripe-sync";
 import { applyContractStatus, mapPandaDocStatus } from "./contracts";
 import type { BillingSchedule, Contract } from "@/lib/types";
 
@@ -14,7 +15,7 @@ const MERCURY_EVERY_MIN = 15;
 
 /** Billing heartbeat, called every minute by /api/cron/tick. Each step is isolated so one failure doesn't block the rest. */
 export async function runBillingCron() {
-  const out = { invoicesIssued: 0, overdue: 0, contractsSent: 0, contractsUpdated: 0, mercury: null as unknown, errors: [] as string[] };
+  const out = { invoicesIssued: 0, overdue: 0, contractsSent: 0, contractsUpdated: 0, mercury: null as unknown, stripe: null as unknown, errors: [] as string[] };
   const db = createAdminClient();
   const today = ymd(new Date());
 
@@ -76,7 +77,15 @@ export async function runBillingCron() {
     } catch (e) { out.errors.push(`pandadoc: ${e instanceof Error ? e.message : e}`); }
   }
 
-  // 4) Every 15 min: Mercury sync + PandaDoc status poll (backup for missed webhooks)
+  // 4) Every 15 min: Stripe status poll (backup for missed webhooks)
+  if (integrations.stripe()) {
+    const lastStripe = await lastStripeSync();
+    if (!lastStripe || new Date(lastStripe.at) < subMinutes(new Date(), MERCURY_EVERY_MIN)) {
+      try { out.stripe = await syncStripe(); } catch (e) { out.errors.push(`stripe: ${e instanceof Error ? e.message : e}`); }
+    }
+  }
+
+  // 5) Every 15 min: Mercury sync + PandaDoc status poll (backup for missed webhooks)
   const last = await lastMercurySync();
   if (!last || new Date(last.at) < subMinutes(new Date(), MERCURY_EVERY_MIN)) {
     if (integrations.mercury()) {

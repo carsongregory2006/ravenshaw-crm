@@ -11,19 +11,24 @@ export interface RecordPaymentInput {
   amount?: number;                 // defaults to remaining balance
   receivedAt?: string;
   mercuryTransactionId?: string | null;
+  stripePaymentRef?: string | null;
   method?: string;
   note?: string | null;
   actorId?: string | null;
 }
 
 /**
- * Records cash received against an invoice. Idempotent per Mercury transaction, and won't double-pay an
+ * Records cash received against an invoice. Idempotent per Mercury transaction / Stripe invoice, and won't double-pay an
  * invoice that's already fully paid. Creates commissions for the deal owner on the cash collected.
  */
 export async function recordPayment(input: RecordPaymentInput): Promise<Payment | null> {
   const db = createAdminClient();
   if (input.mercuryTransactionId) {
     const { data: existing } = await db.from("payments").select("*").eq("mercury_transaction_id", input.mercuryTransactionId).maybeSingle();
+    if (existing) return existing as Payment;
+  }
+  if (input.stripePaymentRef) {
+    const { data: existing } = await db.from("payments").select("*").eq("stripe_payment_ref", input.stripePaymentRef).maybeSingle();
     if (existing) return existing as Payment;
   }
   const { data: inv } = await db.from("invoices").select("*").eq("id", input.invoiceId).single();
@@ -57,8 +62,8 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment 
   const recurringAmount = split.filter((x) => x.basis === "recurring").reduce((a, x) => a + x.base, 0);
   const { data: payment, error } = await db.from("payments").insert({
     invoice_id: invoice.id, client_id: clientId, contact_id: invoice.contact_id, deal_id: dealId,
-    amount, kind: invoice.kind, recurring_amount: Math.min(amount, recurringAmount), received_at: receivedAt, method: input.method ?? "mercury",
-    mercury_transaction_id: input.mercuryTransactionId ?? null, note: input.note ?? null,
+    amount, kind: invoice.kind, recurring_amount: Math.min(amount, recurringAmount), received_at: receivedAt, method: input.method ?? "stripe",
+    mercury_transaction_id: input.mercuryTransactionId ?? null, stripe_payment_ref: input.stripePaymentRef ?? null, note: input.note ?? null,
   }).select("*").single();
   if (error || !payment) throw new Error(error?.message ?? "Could not record payment");
 
@@ -80,7 +85,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment 
   await logActivity({
     type: "payment", title: `Payment received: ${money(amount, { cents: true })} for ${invoice.invoice_number}`,
     contact_id: invoice.contact_id, deal_id: dealId, client_id: clientId, actor_id: input.actorId ?? null,
-    metadata: { payment_id: payment.id, invoice_id: invoice.id, method: input.method ?? "mercury" },
+    metadata: { payment_id: payment.id, invoice_id: invoice.id, method: input.method ?? "stripe" },
   });
 
   const commissionTotal = await createCommissions(payment as Payment, invoice, dealId, clientId);

@@ -74,7 +74,7 @@ export function CommissionsView({ rows, payouts, reps, isAdmin, isStaff }: { row
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="grid grid-cols-1 gap-3 border-b border-border p-3 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.length === 0 && <p className="text-[13px] text-fg-3">No commissions yet. They accrue automatically when client payments land in Mercury.</p>}
+        {cards.length === 0 && <p className="text-[13px] text-fg-3">No commissions yet. They accrue automatically when client payments land in Stripe.</p>}
         {cards.map((c) => (
           <button key={c.id} onClick={() => setRep(rep === c.id ? "" : c.id)}
             className={`rounded-lg border p-3 text-left transition-colors cursor-pointer ${rep === c.id ? "border-accent bg-accent-soft/40" : "border-border hover:bg-hover"}`}>
@@ -164,7 +164,7 @@ export function CommissionsView({ rows, payouts, reps, isAdmin, isStaff }: { row
       )}
 
       <Dialog open={!!payout} onOpenChange={(o) => !o && setPayout(null)} title="Record commission payout" size="sm"
-        description="Marks approved commissions as paid and logs the payout. Pay the rep from Mercury separately."
+        description="Marks approved commissions as paid and logs the payout. Pay the rep from your bank separately."
         footer={<><Button onClick={() => setPayout(null)}>Cancel</Button>
           <Button variant="primary" loading={pending} disabled={!payout?.repId || payoutAmount <= 0}
             onClick={() => payout && run(() => createPayout({ repId: payout.repId, commissionIds: payoutIds(payout.repId), method: payout.method, note: payout.note, paidAt: payout.paidAt }), (d) => `Payout of ${money(d.amount, { cents: true })} recorded`, () => { setPayout(null); setSel(new Set()); })}>

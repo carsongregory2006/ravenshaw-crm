@@ -47,7 +47,7 @@ export function SystemSettings({ events, lastTick, cronConfigured, appUrl }: {
     <>
       <PageTitle title="System" description="Background jobs, webhook activity and data export." />
 
-      <Section title="Scheduler" description="A Supabase pg_cron job calls the app every minute to run automations, send recurring invoices, sync Mercury and retry pending contracts.">
+      <Section title="Scheduler" description="A Supabase pg_cron job calls the app every minute to run automations, send recurring invoices, check Stripe payments and retry pending contracts.">
         <div className="rounded-lg border border-border p-3">
           <div className="flex items-center gap-2 text-[13px]">
             <Clock className="size-4 text-fg-3" />
@@ -81,7 +81,7 @@ export function SystemSettings({ events, lastTick, cronConfigured, appUrl }: {
           <Button size="sm" icon={RefreshCw} onClick={() => router.refresh()} aria-label="Refresh" />
         </>}>
         <div className="overflow-hidden rounded-lg border border-border">
-          {shown.length === 0 ? <EmptyState title="No events yet" description="Webhooks from Telnyx, Resend, Calendly, PandaDoc and Mercury appear here." /> : (
+          {shown.length === 0 ? <EmptyState title="No events yet" description="Webhooks from Telnyx, Resend, Calendly, PandaDoc and Stripe appear here." /> : (
             <table className="w-full text-[13px]">
               <thead><tr className="border-b border-border text-left text-xs text-fg-3">
                 <th className="w-6" /><th className="px-2 py-2 font-normal">Provider</th><th className="px-2 py-2 font-normal">Event</th><th className="px-2 py-2 font-normal">Status</th><th className="px-2 py-2 text-right font-normal">Received</th>

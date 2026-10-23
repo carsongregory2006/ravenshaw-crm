@@ -158,6 +158,7 @@ export interface Client {
   mrr: number;
   health_score: number | null;
   mercury_customer_id: string | null;
+  stripe_customer_id: string | null;
   churned_at: string | null;
   churn_reason: string | null;
   created_at: string;
@@ -211,6 +212,8 @@ export interface Invoice {
   period_end: string | null;
   mercury_invoice_id: string | null;
   mercury_customer_id: string | null;
+  stripe_invoice_id: string | null;
+  stripe_customer_id: string | null;
   payment_url: string | null;
   error: string | null;
   created_at: string;
@@ -260,6 +263,7 @@ export interface Payment {
   received_at: string;
   method: string | null;
   mercury_transaction_id: string | null;
+  stripe_payment_ref: string | null;
   note: string | null;
   created_at: string;
 }

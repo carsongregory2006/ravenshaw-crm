@@ -10,6 +10,7 @@ import { onContractSigned } from "@/lib/billing/onboarding";
 import { issueInvoice, retryInvoice as retryInvoiceLib, voidInvoice as voidInvoiceLib, getInvoiceLines, type InvoiceItem } from "@/lib/billing/invoices";
 import { markInvoicePaidManually } from "@/lib/billing/payments";
 import { syncMercury } from "@/lib/billing/mercury-sync";
+import { syncStripe } from "@/lib/billing/stripe-sync";
 import type {
   BillingSchedule, Client, Contact, Contract, Deal, DealLineItem, Invoice, Payment, Profile,
 } from "@/lib/types";
@@ -196,6 +197,16 @@ export async function syncMercuryNow() {
     revalidatePath("/finance/invoices");
     revalidatePath("/finance");
     revalidatePath("/finance/expenses");
+    return s;
+  });
+}
+
+export async function syncStripeNow() {
+  return safe(async () => {
+    await staff();
+    const s = await syncStripe();
+    revalidatePath("/finance/invoices");
+    revalidatePath("/finance");
     return s;
   });
 }

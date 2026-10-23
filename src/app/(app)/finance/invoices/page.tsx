@@ -2,7 +2,7 @@ import { Receipt } from "lucide-react";
 import { Page, PageHeader } from "@/components/ui/page";
 import { requireStaff } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { lastMercurySync } from "@/lib/billing/mercury-sync";
+import { lastStripeSync } from "@/lib/billing/stripe-sync";
 import { integrations } from "@/lib/env";
 import { InvoicesView, type InvoiceListRow } from "@/components/billing/invoices-view";
 import { contactLabel } from "@/lib/utils";
@@ -16,7 +16,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   const [{ data: invoices }, { data: clients }, last] = await Promise.all([
     db.from("invoices").select("*, contact:contacts(first_name, last_name, email), deal:deals(deal_number)").order("created_at", { ascending: false }).limit(1000),
     db.from("clients").select("id, contact_id, deal_id, contact:contacts(first_name, last_name, email)").neq("status", "churned"),
-    lastMercurySync(),
+    lastStripeSync(),
   ]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: InvoiceListRow[] = (invoices ?? []).map((i: any) => ({ ...i, contact_name: i.contact ? contactLabel(i.contact) : undefined, deal_number: i.deal?.deal_number }));
@@ -25,7 +25,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   return (
     <Page>
       <PageHeader icon={Receipt} title="Invoices" />
-      <InvoicesView rows={rows} clients={clientOptions} lastSync={last?.at ?? null} mercuryConfigured={integrations.mercury()} initialStatus={status ?? "all"} />
+      <InvoicesView rows={rows} clients={clientOptions} lastSync={last?.at ?? null} stripeConfigured={integrations.stripe()} initialStatus={status ?? "all"} />
     </Page>
   );
 }

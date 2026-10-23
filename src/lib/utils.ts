@@ -8,9 +8,9 @@ export function cn(...inputs: ClassValue[]) {
 
 export function money(n: number | string | null | undefined, opts: { cents?: boolean; compact?: boolean } = {}) {
   const v = Number(n ?? 0);
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-CA", {
     style: "currency",
-    currency: "USD",
+    currency: "CAD",
     notation: opts.compact ? "compact" : "standard",
     minimumFractionDigits: opts.cents ? 2 : 0,
     maximumFractionDigits: opts.cents ? 2 : opts.compact ? 1 : 0,

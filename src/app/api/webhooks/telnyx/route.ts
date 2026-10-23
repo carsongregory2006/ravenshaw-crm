@@ -130,17 +130,20 @@ async function findCall(db: Db, p: any) {
 
 async function handleCallEvent(db: Db, type: string, p: any) {
   const direction = p.direction === "incoming" ? "inbound" : "outbound";
-  let call = await findCall(db, p);
+  const call = await findCall(db, p);
 
   if (!call && (type === "call.initiated" || type === "call.answered")) {
     const other = direction === "inbound" ? p.from : p.to;
     const contact = other ? await findContact({ phone: other }) : null;
-    const { data } = await db.from("calls").insert({
+    const row = {
       contact_id: contact?.id ?? null, direction, from_number: toE164(p.from) ?? p.from ?? null, to_number: toE164(p.to) ?? p.to ?? null,
       status: type === "call.answered" ? "answered" : "ringing", telnyx_call_id: p.call_session_id ?? p.call_control_id ?? null,
       started_at: p.start_time ?? p.occurred_at ?? new Date().toISOString(), user_id: contact?.owner_id ?? null,
-    }).select("*").single();
-    call = data;
+    };
+    // Telnyx fires call.initiated for each leg of the same session at the same moment; the unique
+    // telnyx_call_id index makes the losing insert a no-op instead of a second row stuck on "ringing".
+    const { error } = await db.from("calls").upsert(row, { onConflict: "telnyx_call_id", ignoreDuplicates: true });
+    if (error?.code === "42P10") await db.from("calls").insert(row); // unique index not migrated yet
     return;
   }
   if (!call) return;
