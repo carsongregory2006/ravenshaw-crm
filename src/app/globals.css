@@ -109,3 +109,12 @@
 * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 
 .react-flow__attribution { display: none; }
+
+/* public legal pages */
+.legal h1 { font-size: 22px; font-weight: 600; color: var(--fg); margin-bottom: 4px; }
+.legal h2 { font-size: 15px; font-weight: 600; color: var(--fg); margin: 24px 0 8px; }
+.legal p { margin: 10px 0; }
+.legal ul { list-style: disc; padding-left: 20px; margin: 10px 0; }
+.legal li { margin: 4px 0; }
+.legal a { color: var(--accent); text-decoration: underline; }
+.legal code { font-size: 12px; background: var(--bg-3); padding: 1px 4px; border-radius: 4px; }
