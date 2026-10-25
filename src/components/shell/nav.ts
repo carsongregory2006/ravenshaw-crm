@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, User, Building2, Target, BadgeCheck, Rocket, MessagesSquare, Calendar, CheckSquare,
-  BarChart3, Landmark, Phone, Receipt, Wallet, Coins, Globe, Workflow, Settings, type LucideIcon,
+  BarChart3, Landmark, Phone, Zap, TrendingUp, Receipt, Wallet, Coins, Globe, Workflow, Settings, type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/lib/types";
 
@@ -21,6 +21,8 @@ export const NAV: NavSection[] = [
       { href: "/onboarding", label: "Onboarding", icon: Rocket },
       { href: "/inbox", label: "Inbox", icon: MessagesSquare },
       { href: "/phone", label: "Phone", icon: Phone },
+      { href: "/dialer", label: "Power Dialer", icon: Zap },
+      { href: "/cold-calling", label: "Cold Calling", icon: TrendingUp },
       { href: "/calendar", label: "Calendar", icon: Calendar },
       { href: "/tasks", label: "Tasks", icon: CheckSquare },
     ],

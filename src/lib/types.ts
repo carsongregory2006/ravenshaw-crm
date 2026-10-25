@@ -367,6 +367,55 @@ export interface Call {
   ai_summary: string | null;
   started_at: string;
   ended_at: string | null;
+  dial_session_id: string | null;
+  voicemail_drop_id: string | null;
+}
+
+export interface LeadList {
+  id: string;
+  name: string;
+  source: string;
+  created_by: string | null;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface LeadListItem {
+  id: string;
+  list_id: string;
+  contact_id: string;
+  position: number;
+  notes: string | null;
+  status: "pending" | "called" | "skipped";
+  last_outcome: string | null;
+  last_called_at: string | null;
+}
+
+export interface VoicemailDrop {
+  id: string;
+  name: string;
+  storage_path: string;
+  duration_sec: number | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface DialSession {
+  id: string;
+  user_id: string | null;
+  list_id: string | null;
+  name: string | null;
+  from_mode: "fixed" | "local";
+  from_number: string | null;
+  queue: string[];
+  position: number;
+  skipped: string[];
+  conversation_threshold_sec: number;
+  advance_delay_sec: number;
+  voicemail_drop_id: string | null;
+  started_at: string;
+  ended_at: string | null;
+  stats: import("@/lib/dialer/stats").DialStats | null;
 }
 
 export interface Template {

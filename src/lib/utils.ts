@@ -102,12 +102,40 @@ const AREA_CITY: Record<string, string> = {
   "519": "SW Ontario", "226": "SW Ontario", "548": "SW Ontario", "705": "Ontario", "249": "Ontario", "807": "NW Ontario",
 };
 
+const AREA_PROVINCE: Record<string, string> = {
+  ...Object.fromEntries(["613", "343", "753", "416", "647", "437", "942", "905", "289", "365", "742", "519", "226", "548", "705", "249", "807", "683"].map((a) => [a, "ON"])),
+  ...Object.fromEntries(["604", "778", "236", "672", "250"].map((a) => [a, "BC"])),
+  ...Object.fromEntries(["403", "780", "587", "825", "368"].map((a) => [a, "AB"])),
+  ...Object.fromEntries(["204", "431", "584"].map((a) => [a, "MB"])),
+  ...Object.fromEntries(["306", "639", "474"].map((a) => [a, "SK"])),
+  ...Object.fromEntries(["514", "438", "450", "579", "418", "581", "819", "873", "367", "263", "354", "468"].map((a) => [a, "QC"])),
+  ...Object.fromEntries(["902", "782", "506", "428", "709", "879"].map((a) => [a, "ATL"])),
+};
+
+export function areaCode(phone?: string | null) {
+  return (phone ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "").slice(0, 3);
+}
+
 /** Short name for one of our phone lines, e.g. "Toronto · (647) 691-4341". */
 export function lineLabel(phone?: string | null) {
   if (!phone) return "";
-  const area = phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "").slice(0, 3);
-  const city = AREA_CITY[area];
+  const city = AREA_CITY[areaCode(phone)];
   return city ? `${city} · ${fmtPhone(phone)}` : fmtPhone(phone);
+}
+
+/** Local presence: our line with the lead's area code, else the same city, else the same province, else the fallback. */
+export function localLine(leadPhone: string | null | undefined, lines: string[], fallback: string | null): string | null {
+  const area = areaCode(leadPhone);
+  if (!area) return fallback;
+  const exact = lines.find((l) => areaCode(l) === area);
+  if (exact) return exact;
+  // Suburban/overlay codes count as their metro (905 → Toronto, 778 → Vancouver).
+  const metro = (a: string) => ({ GTA: "Toronto", BC: "Vancouver" } as Record<string, string>)[AREA_CITY[a]] ?? AREA_CITY[a];
+  const city = metro(area);
+  const sameCity = city && lines.find((l) => metro(areaCode(l)) === city);
+  if (sameCity) return sameCity;
+  const prov = AREA_PROVINCE[area];
+  return (prov && lines.find((l) => AREA_PROVINCE[areaCode(l)] === prov)) || fallback;
 }
 
 /** Replace {{first_name}}-style merge tags. `{{first_name|there}}` falls back to "there" when empty. */

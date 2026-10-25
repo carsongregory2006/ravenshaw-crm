@@ -12,8 +12,11 @@ import { cn, fmtPhone, lineLabel, toE164 } from "@/lib/utils";
 import { DISPOSITIONS, dispositionLabel } from "@/lib/dispositions";
 import { incomingLineAction, logCallStartAction, lookupContactByPhoneAction, phoneLinesAction, updateCallAction } from "@/lib/actions/comms";
 import { fmtDuration } from "./calls";
+import { playDtmf, startRingback, stopRingback } from "./sounds";
 
 export interface DialTarget { phone: string; contactId?: string | null; name?: string }
+/** Power-dialer options: a fixed From line, the session the call belongs to, and staying on the current page. */
+export interface DialOptions { from?: string | null; dialSessionId?: string | null; stay?: boolean }
 
 type ClientStatus = "offline" | "connecting" | "ready" | "error" | "unavailable";
 type Phase = "idle" | "incoming" | "connecting" | "ringing" | "active" | "held" | "wrapup";
@@ -32,7 +35,8 @@ interface Meta {
 interface Wrapup { dbId: string; contactId: string | null; name: string | null; phone: string; durationSec: number; status: string; disposition: string | null }
 
 interface Phone {
-  call: (t: DialTarget) => void;
+  call: (t: DialTarget, opts?: DialOptions) => Promise<boolean>;
+  dropVoicemail: (url: string, dropId: string) => Promise<boolean>;
   open: () => void;
   status: ClientStatus;
   online: boolean;
@@ -63,7 +67,7 @@ const Ctx = createContext<Phone | null>(null);
 /** Start a call / open the phone from anywhere. */
 export const useDialer = () => {
   const p = useContext(Ctx);
-  return { call: p?.call ?? (() => {}), open: p?.open ?? (() => {}) };
+  return { call: p?.call ?? (async () => false), open: p?.open ?? (() => {}) };
 };
 /** Full phone state, for the /phone page. */
 export const usePhone = () => useContext(Ctx)!;
@@ -116,6 +120,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     finalized.current.add(call.id);
     const m = metaRef.current;
     callRef.current = null;
+    stopRingback();
     setMuted(false);
     setShowKeys(false);
     if (!m) { setPhase("idle"); return; }
@@ -170,6 +175,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
         setPhase("ringing");
         break;
       case "active": {
+        stopRingback();
         const m = metaRef.current;
         if (m && !m.answeredAt) {
           updateMeta({ ...m, answeredAt: Date.now() });
@@ -252,11 +258,11 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
 
   const open = useCallback(() => { if (pathname !== "/phone") router.push("/phone"); }, [pathname, router]);
 
-  const call = useCallback(async (t: DialTarget) => {
-    open();
-    if (callRef.current) { toast.error("Finish the current call first"); return; }
+  const call = useCallback(async (t: DialTarget, opts: DialOptions = {}): Promise<boolean> => {
+    if (!opts.stay) open();
+    if (callRef.current) { toast.error("Finish the current call first"); return false; }
     const phone = toE164(t.phone);
-    if (!phone) { toast.error("Invalid phone number"); return; }
+    if (!phone) { toast.error("Invalid phone number"); return false; }
     setWrapup(null);
     updateMeta({ dbId: null, contactId: t.contactId ?? null, name: t.name ?? null, phone, direction: "outbound", answeredAt: null, line: null, disposition: null });
     setPhase("connecting");
@@ -266,11 +272,13 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setPhase("idle");
       updateMeta(null);
-      return;
+      return false;
     }
     // The server picks the line: an explicit pick, else the line this contact last used, else the default.
-    const logged = await logCallStartAction({ contactId: t.contactId, phone, direction: "outbound", ourNumber: pickedRef.current });
-    if (!logged.ok) { toast.error(logged.error); setPhase("idle"); updateMeta(null); return; }
+    const logged = await logCallStartAction({
+      contactId: t.contactId, phone, direction: "outbound", ourNumber: opts.from ?? pickedRef.current, dialSessionId: opts.dialSessionId ?? null,
+    });
+    if (!logged.ok) { toast.error(logged.error); setPhase("idle"); updateMeta(null); return false; }
     const line = logged.data.ourNumber;
     updateMeta({ ...metaRef.current!, dbId: logged.data.id, contactId: logged.data.contactId, line });
     if (!t.name && logged.data.contactId) {
@@ -279,13 +287,49 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     try {
       const c = client.newCall({ destinationNumber: phone, callerNumber: line ?? undefined, audio: true, video: false });
       callRef.current = c as unknown as TelnyxCall;
+      startRingback();
+      return true;
     } catch (e) {
+      stopRingback();
       toast.error(e instanceof Error ? e.message : "Call failed");
       await updateCallAction(logged.data.id, { status: "failed", ended: true });
       setPhase("idle");
       updateMeta(null);
+      return false;
     }
   }, [ensureClient, open]);
+
+  /**
+   * Voicemail drop: swap our outgoing mic track for the recording, play it into the call, then hang up.
+   * Logs the call as "Left voicemail".
+   */
+  const dropVoicemail = useCallback(async (url: string, dropId: string): Promise<boolean> => {
+    const c = callRef.current;
+    const m = metaRef.current;
+    const pc = (c as unknown as { peer?: { instance?: RTCPeerConnection } } | null)?.peer?.instance;
+    const sender = pc?.getSenders().find((x) => x.track?.kind === "audio");
+    if (!c || !m || !sender) { toast.error("Voicemail drop needs a connected call"); return false; }
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ac = new AC();
+      const buf = await ac.decodeAudioData(await (await fetch(url)).arrayBuffer());
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      const dest = ac.createMediaStreamDestination();
+      src.connect(dest);
+      await sender.replaceTrack(dest.stream.getAudioTracks()[0]);
+      updateMeta({ ...m, disposition: "voicemail" });
+      if (m.dbId) updateCallAction(m.dbId, { disposition: "voicemail", voicemailDropId: dropId });
+      toast("Dropping voicemail…");
+      await new Promise<void>((res) => { src.onended = () => res(); src.start(); });
+      ac.close().catch(() => {});
+      c.hangup().catch(() => {});
+      return true;
+    } catch (e) {
+      toast.error(e instanceof Error ? `Voicemail drop failed: ${e.message}` : "Voicemail drop failed");
+      return false;
+    }
+  }, []);
 
   const answer = async () => {
     const c = callRef.current;
@@ -302,7 +346,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
       toast.error(e instanceof Error ? e.message : "Could not answer");
     }
   };
-  const hangup = () => { callRef.current?.hangup().catch(() => {}); };
+  const hangup = () => { stopRingback(); callRef.current?.hangup().catch(() => {}); };
   const toggleMute = () => {
     const c = callRef.current;
     if (!c) return;
@@ -317,6 +361,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     } catch { toast.error("Hold failed"); }
   };
   const press = (k: string) => {
+    playDtmf(k);
     if (callRef.current && (phase === "active" || phase === "held")) callRef.current.dtmf(k);
     else setNumber((n) => n + k);
   };
@@ -344,7 +389,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value: Phone = {
-    call, open, status, online, toggleOnline, phase, meta, wrapup, now, muted, showKeys, setShowKeys, number, setNumber,
+    call, dropVoicemail, open, status, online, toggleOnline, phase, meta, wrapup, now, muted, showKeys, setShowKeys, number, setNumber,
     lines, defaultLine, pickedLine, pickLine, answer, hangup, toggleMute, toggleHold, press, setOutcome, finishWrapup,
   };
 
@@ -353,7 +398,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
       {children}
       <audio id="dialer-remote-audio" autoPlay playsInline className="hidden" />
       {/* Off the Phone page, a small card keeps a ringing or live call (and its outcome) within reach. */}
-      {pathname !== "/phone" && phase !== "idle" && (
+      {pathname !== "/phone" && !pathname.startsWith("/dialer/session") && phase !== "idle" && (
         <div className="fixed bottom-5 right-5 z-40 w-[300px] overflow-hidden rounded-xl border border-border bg-bg shadow-lg">
           <div className="flex h-9 items-center border-b border-border-light px-3 text-xs text-fg-2">
             Phone
@@ -456,7 +501,7 @@ function DialPad() {
   return (
     <div className="p-3">
       <div className="flex items-center gap-1">
-        <Input value={p.number} onChange={(e) => p.setNumber(() => e.target.value)} placeholder="Enter a number"
+        <Input value={p.number} onChange={(e) => { const v = e.target.value; if (v.length > p.number.length) playDtmf(v.slice(-1)); p.setNumber(() => v); }} placeholder="Enter a number"
           onKeyDown={(e) => e.key === "Enter" && p.number && p.call({ phone: p.number })} className="h-10 text-center text-base tracking-wide" />
         <Button size="md" variant="ghost" icon={Delete} onClick={() => p.setNumber((n) => n.slice(0, -1))} aria-label="Backspace" />
       </div>

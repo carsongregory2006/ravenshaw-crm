@@ -161,7 +161,7 @@ export async function incomingLineAction(phone: string) {
  * Logs a call. Outbound: `ourNumber` is an explicit line pick; without one we call from the line this contact
  * last used, else the default. Inbound: `ourNumber` is the line it rang on. Returns the line used.
  */
-export async function logCallStartAction(input: { contactId?: string | null; phone: string; direction: Direction; telnyxCallId?: string | null; ourNumber?: string | null }) {
+export async function logCallStartAction(input: { contactId?: string | null; phone: string; direction: Direction; telnyxCallId?: string | null; ourNumber?: string | null; dialSessionId?: string | null }) {
   return safe(async () => {
     const uid = await userId();
     const admin = createAdminClient();
@@ -177,6 +177,10 @@ export async function logCallStartAction(input: { contactId?: string | null; pho
         return { id: existing.id as string, contactId, ourNumber: (existing.to_number as string | null) ?? null };
       }
     }
+    if (input.dialSessionId) {
+      const { data: own } = await (await createClient()).from("dial_sessions").select("id").eq("id", input.dialSessionId).maybeSingle();
+      if (!own) throw new Error("Dialing session not found");
+    }
     const ours = input.direction === "outbound"
       ? await resolveLine({ requested: input.ourNumber, contactId })
       : toE164(input.ourNumber ?? null) ?? (await ourLines()).defaultLine;
@@ -186,6 +190,7 @@ export async function logCallStartAction(input: { contactId?: string | null; pho
       to_number: input.direction === "outbound" ? number : ours,
       status: input.direction === "outbound" ? "initiated" : "answered",
       telnyx_call_id: input.telnyxCallId ?? null,
+      dial_session_id: input.dialSessionId ?? null,
     }).select("id").single();
     if (error) throw new Error(error.message);
     return { id: data.id as string, contactId, ourNumber: ours };
@@ -194,6 +199,7 @@ export async function logCallStartAction(input: { contactId?: string | null; pho
 
 export async function updateCallAction(id: string, patch: {
   status?: string; durationSec?: number; disposition?: string | null; notes?: string | null; telnyxCallId?: string | null; ended?: boolean;
+  voicemailDropId?: string | null;
 }) {
   return safe(async () => {
     const uid = await userId();
@@ -205,6 +211,7 @@ export async function updateCallAction(id: string, patch: {
     if (patch.durationSec != null) upd.duration_sec = patch.durationSec;
     if (patch.disposition !== undefined) upd.disposition = patch.disposition;
     if (patch.notes !== undefined) upd.notes = patch.notes;
+    if (patch.voicemailDropId) upd.voicemail_drop_id = patch.voicemailDropId;
     if (patch.telnyxCallId && !call.telnyx_call_id) upd.telnyx_call_id = patch.telnyxCallId;
     if (patch.ended && !call.ended_at) upd.ended_at = new Date().toISOString();
     if (patch.disposition && !DISPOSITION_VALUES.includes(patch.disposition)) throw new Error("Unknown call outcome");
@@ -227,6 +234,14 @@ export async function updateCallAction(id: string, patch: {
         title: outcomeChanged ? `Call outcome: ${dispositionLabel(patch.disposition)}` : "Call notes",
         body: patch.notes ?? null, metadata: { call_id: id, disposition: patch.disposition ?? call.disposition },
       });
+    }
+    // Power dialer: keep the lead list in step with the outcome.
+    if (outcomeChanged && call.dial_session_id && call.contact_id) {
+      const { data: sess } = await admin.from("dial_sessions").select("list_id").eq("id", call.dial_session_id).maybeSingle();
+      if (sess?.list_id) {
+        await admin.from("lead_list_items").update({ status: "called", last_outcome: patch.disposition, last_called_at: call.started_at })
+          .eq("list_id", sess.list_id).eq("contact_id", call.contact_id);
+      }
     }
     if (outcomeChanged && patch.disposition === "bad_number" && call.contact_id) {
       await admin.from("contacts").update({ phone_bad: true, phone_bad_at: new Date().toISOString() }).eq("id", call.contact_id);
