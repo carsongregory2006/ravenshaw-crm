@@ -14,7 +14,7 @@ import { EmptyState, Spinner } from "@/components/ui/misc";
 import { useProfile } from "@/components/shell/profile-context";
 import { createClient } from "@/lib/supabase/client";
 import { markConversationReadAction } from "@/lib/actions/comms";
-import { cn, contactLabel, feedTime, fmtPhone } from "@/lib/utils";
+import { cn, contactLabel, feedTime, fmtPhone, lineLabel } from "@/lib/utils";
 import { useContactMessages } from "@/components/comms/hooks";
 import { SmsBubble, SmsComposer, useAutoScroll } from "@/components/comms/sms";
 import { EmailComposer, EmailItem, replySubject } from "@/components/comms/email";
@@ -23,7 +23,7 @@ import { useDialer } from "@/components/comms/dialer";
 import type { Channel, Contact, Message } from "@/lib/types";
 
 type ContactLite = Pick<Contact, "id" | "first_name" | "last_name" | "email" | "phone" | "owner_id">;
-type Row = Pick<Message, "id" | "contact_id" | "channel" | "direction" | "subject" | "body" | "created_at" | "read_at"> & { contact: ContactLite | null };
+type Row = Pick<Message, "id" | "contact_id" | "channel" | "direction" | "subject" | "body" | "created_at" | "read_at" | "from_addr" | "to_addr"> & { contact: ContactLite | null };
 interface Convo { contact: ContactLite; last: Row; unread: number; channels: Set<Channel> }
 
 export function Inbox() {
@@ -41,7 +41,7 @@ export function Inbox() {
 
   const load = useCallback(async () => {
     const { data } = await createClient().from("messages")
-      .select("id, contact_id, channel, direction, subject, body, created_at, read_at, contact:contacts(id, first_name, last_name, email, phone, owner_id)")
+      .select("id, contact_id, channel, direction, subject, body, created_at, read_at, from_addr, to_addr, contact:contacts(id, first_name, last_name, email, phone, owner_id)")
       .not("contact_id", "is", null).order("created_at", { ascending: false }).limit(1500);
     setRows((data as unknown as Row[]) ?? []);
     setLoading(false);
@@ -125,6 +125,9 @@ export function Inbox() {
                       <span className={cn("truncate text-xs", c.unread ? "text-fg" : "text-fg-3")}>
                         {c.last.direction === "outbound" && "You: "}{c.last.channel === "email" ? c.last.subject : c.last.body}
                       </span>
+                      {c.last.channel === "sms" && (c.last.direction === "inbound" ? c.last.to_addr : c.last.from_addr) && (
+                        <span className="ml-auto shrink-0 text-[10px] text-fg-4" title="Your number on this conversation">{lineLabel(c.last.direction === "inbound" ? c.last.to_addr : c.last.from_addr).split(" · ")[0]}</span>
+                      )}
                       {c.unread > 0 && <span className="ml-auto shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-semibold text-white">{c.unread}</span>}
                     </div>
                   </div>

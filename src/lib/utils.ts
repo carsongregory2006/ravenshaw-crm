@@ -91,6 +91,25 @@ export function fmtPhone(phone?: string | null) {
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
 }
 
+const AREA_CITY: Record<string, string> = {
+  "613": "Ottawa", "343": "Ottawa", "753": "Ottawa",
+  "416": "Toronto", "647": "Toronto", "437": "Toronto", "942": "Toronto",
+  "905": "GTA", "289": "GTA", "365": "GTA", "742": "GTA",
+  "604": "Vancouver", "778": "BC", "236": "BC", "672": "BC", "250": "BC",
+  "403": "Calgary", "780": "Edmonton", "587": "Alberta", "825": "Alberta", "368": "Alberta",
+  "204": "Winnipeg", "431": "Winnipeg", "306": "Saskatchewan", "639": "Saskatchewan",
+  "514": "Montreal", "438": "Montreal", "902": "Maritimes", "782": "Maritimes", "709": "Newfoundland",
+  "519": "SW Ontario", "226": "SW Ontario", "548": "SW Ontario", "705": "Ontario", "249": "Ontario", "807": "NW Ontario",
+};
+
+/** Short name for one of our phone lines, e.g. "Toronto · (647) 691-4341". */
+export function lineLabel(phone?: string | null) {
+  if (!phone) return "";
+  const area = phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "").slice(0, 3);
+  const city = AREA_CITY[area];
+  return city ? `${city} · ${fmtPhone(phone)}` : fmtPhone(phone);
+}
+
 /** Replace {{first_name}}-style merge tags. `{{first_name|there}}` falls back to "there" when empty. */
 export function renderTemplate(tpl: string, vars: Record<string, unknown>) {
   const out = tpl.replace(/\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g, (_, key: string, fallback?: string) => {

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Check, CheckCircle2, Circle, Copy, CreditCard, ExternalLink, Landmark, Mail, MessageSquare, Phone, Calendar, FileSignature, Sparkles, CalendarDays, Database, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,8 @@ import { Tag } from "@/components/ui/badge";
 import {
   calendlyEventTypes, calendlyRegisterWebhook, mercuryAccounts, pandadocTemplates, testAi, testEmail, testSms, updateWorkspace,
 } from "@/lib/actions/settings";
-import { money } from "@/lib/utils";
+import { lineLabel, money } from "@/lib/utils";
+import { phoneLinesAction } from "@/lib/actions/comms";
 import type { WorkspaceSettings } from "@/lib/types";
 import { PageTitle, Section } from "./section";
 
@@ -172,12 +173,22 @@ function GoogleActions({ email }: { email: string | null }) {
 function SenderSettings({ settings, defaultFromEmail }: { settings: WorkspaceSettings; defaultFromEmail: string | null }) {
   const { busy, run } = useRun();
   const [f, setF] = useState({ email_from_name: settings.email_from_name ?? "", email_from_address: settings.email_from_address ?? "", sms_from_number: settings.sms_from_number ?? "" });
+  const [lines, setLines] = useState<string[]>([]);
+  useEffect(() => { phoneLinesAction().then((r) => r.ok && setLines(r.data.lines)); }, []);
+  const lineOptions = [...new Set([...lines, ...(f.sms_from_number ? [f.sms_from_number] : [])])];
   return (
-    <Section title="Senders" description="Who outbound email and SMS come from. Falls back to RESEND_FROM_EMAIL / TELNYX_FROM_NUMBER.">
+    <Section title="Senders" description="Who outbound email, SMS and calls come from. Falls back to RESEND_FROM_EMAIL / TELNYX_FROM_NUMBER. Every active number in your Telnyx account can be picked when texting or calling.">
       <div className="grid grid-cols-3 gap-3">
         <Field label="Email from name"><Input value={f.email_from_name} onChange={(e) => setF({ ...f, email_from_name: e.target.value })} placeholder="Ravenshaw AI" /></Field>
         <Field label="Email from address" hint="Must be on a domain verified in Resend."><Input type="email" value={f.email_from_address} onChange={(e) => setF({ ...f, email_from_address: e.target.value })} placeholder={defaultFromEmail ? `${defaultFromEmail} (default from RESEND_FROM_EMAIL)` : "team@ravenshaw.ai"} /></Field>
-        <Field label="SMS from number" hint="E.164, e.g. +15555550123"><Input value={f.sms_from_number} onChange={(e) => setF({ ...f, sms_from_number: e.target.value })} placeholder="+1…" /></Field>
+        <Field label="Default phone number" hint="Used for new conversations and calls. Contacts you've already talked to get replies from the number they used.">
+          {lineOptions.length
+            ? <Select value={f.sms_from_number} onChange={(e) => setF({ ...f, sms_from_number: e.target.value })}>
+                <option value="">TELNYX_FROM_NUMBER (env)</option>
+                {lineOptions.map((l) => <option key={l} value={l}>{lineLabel(l)}</option>)}
+              </Select>
+            : <Input value={f.sms_from_number} onChange={(e) => setF({ ...f, sms_from_number: e.target.value })} placeholder="+1…" />}
+        </Field>
       </div>
       <Button className="mt-3" variant="primary" loading={busy}
         onClick={() => run(() => updateWorkspace({ email_from_name: f.email_from_name || null, email_from_address: f.email_from_address || null, sms_from_number: f.sms_from_number || null }), () => toast.success("Senders saved"))}>Save senders</Button>

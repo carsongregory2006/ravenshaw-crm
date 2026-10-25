@@ -6,6 +6,7 @@ import { safe } from "@/lib/actions/util";
 import { sendEmailToContact, sendSmsToContact, findContact } from "@/lib/comms";
 import { chat, chatJson } from "@/lib/integrations/openrouter";
 import { logActivity } from "@/lib/activity";
+import { lastUsedLine, ourLines, resolveLine } from "@/lib/phone-lines";
 import { contactLabel, toE164 } from "@/lib/utils";
 import type { Channel, Contact, Direction } from "@/lib/types";
 
@@ -24,12 +25,26 @@ async function visibleContact(contactId: string) {
   return data as Contact;
 }
 
-export async function sendSmsAction(contactId: string, text: string) {
+/** Our phone lines, the default, and (for a contact) the line we'd reply on. */
+export async function phoneLinesAction(contactId?: string | null) {
+  return safe(async () => {
+    await userId();
+    const { lines, defaultLine } = await ourLines();
+    let suggested = defaultLine;
+    if (contactId) {
+      await visibleContact(contactId);
+      suggested = (await lastUsedLine(contactId, lines)) ?? defaultLine;
+    }
+    return { lines, defaultLine, suggested };
+  });
+}
+
+export async function sendSmsAction(contactId: string, text: string, from?: string | null) {
   return safe(async () => {
     const uid = await userId();
     await visibleContact(contactId);
     if (!text.trim()) throw new Error("Message is empty");
-    const r = await sendSmsToContact(contactId, text, { userId: uid });
+    const r = await sendSmsToContact(contactId, text, { userId: uid, from });
     if (!r.ok) throw new Error(r.error || "SMS failed");
     revalidatePath(`/contacts/${contactId}`);
     return { messageId: r.messageId };
@@ -129,7 +144,23 @@ export async function lookupContactByPhoneAction(phone: string) {
   });
 }
 
-export async function logCallStartAction(input: { contactId?: string | null; phone: string; direction: Direction; telnyxCallId?: string | null; fromNumber?: string | null }) {
+/** Which of our lines a ringing inbound call from this number came in on (from the webhook's call row). */
+export async function incomingLineAction(phone: string) {
+  return safe(async () => {
+    await userId();
+    const from = toE164(phone);
+    if (!from) return null;
+    const { data } = await createAdminClient().from("calls").select("to_number").eq("direction", "inbound").eq("from_number", from)
+      .gte("started_at", new Date(Date.now() - 2 * 60_000).toISOString()).order("started_at", { ascending: false }).limit(1).maybeSingle();
+    return (data?.to_number as string | null) ?? null;
+  });
+}
+
+/**
+ * Logs a call. Outbound: `ourNumber` is an explicit line pick; without one we call from the line this contact
+ * last used, else the default. Inbound: `ourNumber` is the line it rang on. Returns the line used.
+ */
+export async function logCallStartAction(input: { contactId?: string | null; phone: string; direction: Direction; telnyxCallId?: string | null; ourNumber?: string | null }) {
   return safe(async () => {
     const uid = await userId();
     const admin = createAdminClient();
@@ -139,14 +170,15 @@ export async function logCallStartAction(input: { contactId?: string | null; pho
 
     // A webhook may already have created this call (inbound): claim it instead of duplicating.
     if (input.telnyxCallId) {
-      const { data: existing } = await admin.from("calls").select("id").eq("telnyx_call_id", input.telnyxCallId).maybeSingle();
+      const { data: existing } = await admin.from("calls").select("id, to_number").eq("telnyx_call_id", input.telnyxCallId).maybeSingle();
       if (existing) {
         await admin.from("calls").update({ user_id: uid, contact_id: contactId }).eq("id", existing.id);
-        return { id: existing.id as string, contactId };
+        return { id: existing.id as string, contactId, ourNumber: (existing.to_number as string | null) ?? null };
       }
     }
-    const { data: settings } = await admin.from("workspace_settings").select("sms_from_number").eq("id", 1).single();
-    const ours = input.fromNumber || settings?.sms_from_number || process.env.TELNYX_FROM_NUMBER || null;
+    const ours = input.direction === "outbound"
+      ? await resolveLine({ requested: input.ourNumber, contactId })
+      : toE164(input.ourNumber ?? null) ?? (await ourLines()).defaultLine;
     const { data, error } = await admin.from("calls").insert({
       contact_id: contactId, user_id: uid, direction: input.direction,
       from_number: input.direction === "outbound" ? ours : number,
@@ -155,7 +187,7 @@ export async function logCallStartAction(input: { contactId?: string | null; pho
       telnyx_call_id: input.telnyxCallId ?? null,
     }).select("id").single();
     if (error) throw new Error(error.message);
-    return { id: data.id as string, contactId };
+    return { id: data.id as string, contactId, ourNumber: ours };
   });
 }
 

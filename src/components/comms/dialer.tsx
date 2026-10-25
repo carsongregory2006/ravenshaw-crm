@@ -7,8 +7,8 @@ import type { Call as TelnyxCall, TelnyxRTC } from "@telnyx/webrtc";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Switch, Textarea } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/avatar";
-import { cn, fmtPhone, toE164 } from "@/lib/utils";
-import { logCallStartAction, lookupContactByPhoneAction, updateCallAction } from "@/lib/actions/comms";
+import { cn, fmtPhone, lineLabel, toE164 } from "@/lib/utils";
+import { incomingLineAction, logCallStartAction, lookupContactByPhoneAction, phoneLinesAction, updateCallAction } from "@/lib/actions/comms";
 import { DISPOSITIONS, fmtDuration } from "./calls";
 
 export interface DialTarget { phone: string; contactId?: string | null; name?: string }
@@ -30,6 +30,8 @@ interface Meta {
   phone: string;
   direction: "inbound" | "outbound";
   answeredAt: number | null;
+  /** Our number: the line we're calling from, or the line an inbound call rang on. */
+  line: string | null;
 }
 interface Wrapup { dbId: string | null; contactId: string | null; name: string | null; phone: string; durationSec: number; status: string }
 
@@ -40,7 +42,6 @@ const SUB: Record<string, string> = { "2": "ABC", "3": "DEF", "4": "GHI", "5": "
 export function DialerProvider({ children }: { children: React.ReactNode }) {
   const clientRef = useRef<TelnyxRTC | null>(null);
   const readyPromise = useRef<Promise<TelnyxRTC> | null>(null);
-  const callerNumber = useRef<string | null>(null);
   const callRef = useRef<TelnyxCall | null>(null);
   const metaRef = useRef<Meta | null>(null);
   const finalized = useRef<Set<string>>(new Set());
@@ -55,6 +56,12 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
   const [showKeys, setShowKeys] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [wrapup, setWrapup] = useState<Wrapup | null>(null);
+  const [lines, setLines] = useState<string[]>([]);
+  const [defaultLine, setDefaultLine] = useState<string | null>(null);
+  // null = automatic: the line the contact last used, else the default line.
+  const [pickedLine, setPickedLine] = useState<string | null>(null);
+  const pickedRef = useRef<string | null>(null);
+  const pickLine = (l: string | null) => { pickedRef.current = l; setPickedLine(l); };
 
   const updateMeta = (m: Meta | null) => { metaRef.current = m; setMeta(m); };
 
@@ -95,12 +102,20 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     if (call.direction === "inbound" && state === "ringing" && !callRef.current) {
       callRef.current = call;
       const phone = call.options?.remoteCallerNumber || "";
-      updateMeta({ dbId: null, contactId: null, name: call.options?.remoteCallerName || null, phone, direction: "inbound", answeredAt: null });
+      updateMeta({ dbId: null, contactId: null, name: call.options?.remoteCallerName || null, phone, direction: "inbound", answeredAt: null, line: null });
       setPhase("incoming");
       setPanel(true);
-      const r = await lookupContactByPhoneAction(phone);
-      if (r.ok && r.data && metaRef.current?.phone === phone) updateMeta({ ...metaRef.current, contactId: r.data.id, name: r.data.name });
-      toast(`Incoming call from ${r.ok && r.data ? r.data.name : fmtPhone(phone)}`);
+      const [r, ln] = await Promise.all([lookupContactByPhoneAction(phone), incomingLineAction(phone)]);
+      let line = ln.ok ? ln.data : null;
+      if (metaRef.current?.phone === phone) updateMeta({ ...metaRef.current, ...(r.ok && r.data ? { contactId: r.data.id, name: r.data.name } : {}), line });
+      toast(`Incoming call from ${r.ok && r.data ? r.data.name : fmtPhone(phone)}${line ? ` on ${lineLabel(line)}` : ""}`);
+      if (!line) {
+        // The webhook can land a moment after the browser starts ringing.
+        await new Promise((res) => setTimeout(res, 2000));
+        const again = await incomingLineAction(phone);
+        line = again.ok ? again.data : null;
+        if (line && metaRef.current?.phone === phone && !metaRef.current.line) updateMeta({ ...metaRef.current, line });
+      }
       return;
     }
     if (!isCurrent) {
@@ -147,7 +162,8 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
         setStatus(body.notConfigured ? "unavailable" : "error");
         throw new Error(body.error || "Could not get a dialer token");
       }
-      callerNumber.current = body.callerNumber;
+      setLines(body.lines ?? []);
+      setDefaultLine(body.defaultLine ?? null);
       const { TelnyxRTC: Client } = await import("@telnyx/webrtc");
       const client = new Client({ login_token: body.token });
       client.remoteElement = "dialer-remote-audio";
@@ -174,6 +190,12 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
       throw e;
     }
   }, [onCallUpdate]);
+
+  // Load our lines for the "From" picker the first time the pad opens (the token fetch also refreshes them).
+  useEffect(() => {
+    if (!panel || lines.length) return;
+    phoneLinesAction().then((r) => { if (r.ok) { setLines(r.data.lines); setDefaultLine(r.data.defaultLine); } });
+  }, [panel, lines.length]);
 
   // Esc closes the dial pad when no call is in progress.
   useEffect(() => {
@@ -211,7 +233,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     const phone = toE164(t.phone);
     if (!phone) { toast.error("Invalid phone number"); return; }
     setWrapup(null);
-    updateMeta({ dbId: null, contactId: t.contactId ?? null, name: t.name ?? null, phone, direction: "outbound", answeredAt: null });
+    updateMeta({ dbId: null, contactId: t.contactId ?? null, name: t.name ?? null, phone, direction: "outbound", answeredAt: null, line: null });
     setPhase("connecting");
     let client: TelnyxRTC;
     try {
@@ -221,14 +243,16 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
       updateMeta(null);
       return;
     }
-    const logged = await logCallStartAction({ contactId: t.contactId, phone, direction: "outbound", fromNumber: callerNumber.current });
+    // The server picks the line: an explicit pick, else the line this contact last used, else the default.
+    const logged = await logCallStartAction({ contactId: t.contactId, phone, direction: "outbound", ourNumber: pickedRef.current });
     if (!logged.ok) { toast.error(logged.error); setPhase("idle"); updateMeta(null); return; }
-    updateMeta({ ...metaRef.current!, dbId: logged.data.id, contactId: logged.data.contactId });
+    const line = logged.data.ourNumber;
+    updateMeta({ ...metaRef.current!, dbId: logged.data.id, contactId: logged.data.contactId, line });
     if (!t.name && logged.data.contactId) {
       lookupContactByPhoneAction(phone).then((r) => { if (r.ok && r.data && metaRef.current) updateMeta({ ...metaRef.current, name: r.data.name }); });
     }
     try {
-      const c = client.newCall({ destinationNumber: phone, callerNumber: callerNumber.current ?? undefined, audio: true, video: false });
+      const c = client.newCall({ destinationNumber: phone, callerNumber: line ?? undefined, audio: true, video: false });
       callRef.current = c as unknown as TelnyxCall;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Call failed");
@@ -245,10 +269,10 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
     try {
       await c.answer();
       const logged = await logCallStartAction({
-        contactId: m.contactId, phone: m.phone, direction: "inbound",
+        contactId: m.contactId, phone: m.phone, direction: "inbound", ourNumber: m.line,
         telnyxCallId: c.options?.telnyxSessionId || c.options?.telnyxCallControlId || null,
       });
-      if (logged.ok) updateMeta({ ...metaRef.current!, dbId: logged.data.id, contactId: logged.data.contactId ?? m.contactId });
+      if (logged.ok) updateMeta({ ...metaRef.current!, dbId: logged.data.id, contactId: logged.data.contactId ?? m.contactId, line: logged.data.ourNumber ?? metaRef.current!.line });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not answer");
     }
@@ -310,6 +334,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
               <PhoneIncoming className="mx-auto mb-2 size-6 animate-pulse text-success" />
               <div className="text-sm font-semibold">{meta.name || fmtPhone(meta.phone)}</div>
               {meta.name && <div className="text-xs text-fg-3">{fmtPhone(meta.phone)}</div>}
+              {meta.line && <div className="mt-1 text-xs text-fg-2">Calling your {lineLabel(meta.line)} line</div>}
               <div className="mt-4 flex justify-center gap-3">
                 <button onClick={hangup} className="flex size-12 items-center justify-center rounded-full bg-danger text-white cursor-pointer" aria-label="Decline"><PhoneOff className="size-5" /></button>
                 <button onClick={answer} className="flex size-12 items-center justify-center rounded-full bg-success text-white cursor-pointer" aria-label="Answer"><Phone className="size-5" /></button>
@@ -327,6 +352,7 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
                   {(phase === "connecting" || phase === "ringing") && <Loader2 className="size-3 animate-spin" />}
                   {phase === "connecting" ? "Connecting…" : phase === "ringing" ? "Ringing…" : phase === "held" ? `On hold · ${fmtDuration(Math.round((now - (meta.answeredAt ?? now)) / 1000))}` : fmtDuration(Math.round((now - (meta.answeredAt ?? now)) / 1000))}
                 </div>
+                {meta.line && <div className="mt-0.5 text-[11px] text-fg-3">{meta.direction === "outbound" ? "From" : "On"} {lineLabel(meta.line)}</div>}
                 {meta.contactId && <Link href={`/contacts/${meta.contactId}`} className="mt-1 text-xs text-accent hover:underline">Open profile</Link>}
               </div>
               {showKeys && <Keypad onPress={press} className="mt-3" />}
@@ -349,6 +375,12 @@ export function DialerProvider({ children }: { children: React.ReactNode }) {
                 <Button size="md" variant="ghost" icon={Delete} onClick={() => setNumber((n) => n.slice(0, -1))} aria-label="Backspace" />
               </div>
               <Keypad onPress={press} className="mt-2" />
+              {lines.length > 1 && (
+                <Select value={pickedLine ?? ""} onChange={(e) => pickLine(e.target.value || null)} className="mt-2 h-8 text-xs" aria-label="Call from">
+                  <option value="">From: auto (contact&apos;s last line, else {lineLabel(defaultLine)})</option>
+                  {lines.map((l) => <option key={l} value={l}>From: {lineLabel(l)}{l === defaultLine ? " (default)" : ""}</option>)}
+                </Select>
+              )}
               <Button variant="primary" size="md" icon={Phone} className="mt-3 w-full bg-success hover:bg-success hover:opacity-90" disabled={!number || status === "unavailable"} onClick={() => call({ phone: number })}>
                 Call
               </Button>

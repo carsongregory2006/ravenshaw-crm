@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/integrations/telnyx";
 import { sendEmail, emailHtml } from "@/lib/integrations/resend";
+import { resolveLine } from "@/lib/phone-lines";
 import { contactLabel, renderTemplate, toE164 } from "@/lib/utils";
 import type { Contact, WorkspaceSettings } from "@/lib/types";
 
@@ -34,13 +35,14 @@ export function mergeVars(contact: Contact & { company?: { name: string } | null
 
 export interface SendResult { ok: boolean; messageId?: string; error?: string }
 
-export async function sendSmsToContact(contactId: string, text: string, opts: { userId?: string | null; automationRunId?: string | null; vars?: Record<string, unknown> } = {}): Promise<SendResult> {
+export async function sendSmsToContact(contactId: string, text: string, opts: { userId?: string | null; automationRunId?: string | null; vars?: Record<string, unknown>; from?: string | null } = {}): Promise<SendResult> {
   const { db, contact, settings } = await loadContext(contactId);
   const to = toE164(contact.phone);
   if (!to) return { ok: false, error: "Contact has no phone number" };
   if (contact.do_not_contact || contact.sms_opt_out) return { ok: false, error: "Contact opted out of SMS" };
   const body = renderTemplate(text, mergeVars(contact, settings, opts.vars));
-  const from = settings?.sms_from_number || process.env.TELNYX_FROM_NUMBER || null;
+  // Explicit pick, else the number this contact last used, else the default line.
+  const from = await resolveLine({ requested: opts.from, contactId });
   const { data: msg } = await db.from("messages").insert({
     contact_id: contactId, channel: "sms", direction: "outbound", from_addr: from, to_addr: to, body,
     status: "queued", sent_by: opts.userId ?? null, automation_run_id: opts.automationRunId ?? null,

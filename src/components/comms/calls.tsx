@@ -9,7 +9,7 @@ import { Field, Select, Textarea } from "@/components/ui/input";
 import { StatusTag, Tag } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { summarizeCallAction, updateCallAction } from "@/lib/actions/comms";
-import { fmtDateTime, fmtPhone, cn } from "@/lib/utils";
+import { fmtDateTime, fmtPhone, cn, lineLabel } from "@/lib/utils";
 import type { Call } from "@/lib/types";
 
 export const DISPOSITIONS = [
@@ -81,6 +81,7 @@ export function CallRow({ call, onChanged }: { call: Call; onChanged: () => void
           </div>
           <div className="text-xs text-fg-3">
             <Time value={call.started_at} format="datetime" /> · {fmtDuration(call.duration_sec)} · {fmtPhone(call.direction === "inbound" ? call.from_number : call.to_number)}
+            {(call.direction === "inbound" ? call.to_number : call.from_number) && <> · {call.direction === "inbound" ? "on" : "from"} {lineLabel(call.direction === "inbound" ? call.to_number : call.from_number)}</>}
           </div>
         </div>
         <Button size="xs" variant="ghost" icon={Pencil} onClick={() => setEditing(true)}>Outcome</Button>

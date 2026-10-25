@@ -33,6 +33,19 @@ export async function sendSms(input: { to: string; text: string; from?: string; 
   return { id: data.data.id };
 }
 
+/** Active phone numbers on the Telnyx account (E.164). */
+export async function listTelnyxNumbers(): Promise<string[]> {
+  const out: string[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const r = await telnyx<{ data: { phone_number: string; status: string }[]; meta?: { total_pages?: number } }>(
+      `/phone_numbers?page[number]=${page}&page[size]=250&filter[status]=active`,
+    );
+    out.push(...r.data.map((n) => n.phone_number));
+    if (!r.meta?.total_pages || page >= r.meta.total_pages) break;
+  }
+  return out;
+}
+
 const CREDENTIAL_KV_KEY = "telnyx_telephony_credential";
 
 /**

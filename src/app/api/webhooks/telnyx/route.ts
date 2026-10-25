@@ -5,7 +5,7 @@ import { findContact } from "@/lib/comms";
 import { logActivity, notify, notifyAdmins } from "@/lib/activity";
 import { emitEvent } from "@/lib/events";
 import { chat } from "@/lib/integrations/openrouter";
-import { contactLabel, fmtPhone, toE164 } from "@/lib/utils";
+import { contactLabel, fmtPhone, lineLabel, toE164 } from "@/lib/utils";
 import type { Contact } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +82,7 @@ async function handleInboundSms(db: Db, p: any) {
   }
 
   await logActivity({ type: "sms", contact_id: contact.id, title: "SMS received", body: bodyText });
-  const n = { title: `New text from ${contactLabel(contact) || fmtPhone(from)}`, body: text.slice(0, 140), link: `/inbox?c=${contact.id}` };
+  const n = { title: `New text from ${contactLabel(contact) || fmtPhone(from)}${to ? ` to ${lineLabel(to)}` : ""}`, body: text.slice(0, 140), link: `/inbox?c=${contact.id}` };
   if (contact.owner_id) await notify([contact.owner_id], n); else await notifyAdmins(n);
   // inbound_sms first (it cancels stop-on-reply runs), then lead_created so a new texter's welcome flow isn't cancelled.
   await emitEvent({ type: "inbound_sms", contactId: contact.id, data: { message: text, new_contact: created } });
@@ -164,7 +164,7 @@ async function handleCallEvent(db: Db, type: string, p: any) {
     if (status === "missed") {
       const contact = call.contact_id ? (await db.from("contacts").select("*").eq("id", call.contact_id).maybeSingle()).data as Contact | null : null;
       const who = contact ? contactLabel(contact) : fmtPhone(call.from_number);
-      const n = { title: `Missed call from ${who}`, body: fmtPhone(call.from_number), link: contact ? `/contacts/${contact.id}` : "/inbox" };
+      const n = { title: `Missed call from ${who}`, body: `${fmtPhone(call.from_number)}${call.to_number ? ` · on ${lineLabel(call.to_number)}` : ""}`, link: contact ? `/contacts/${contact.id}` : "/inbox" };
       if (contact?.owner_id) await notify([contact.owner_id], n); else await notifyAdmins(n);
       await db.from("tasks").insert({
         title: `Return missed call from ${who}`, priority: "high", due_at: new Date(Date.now() + 60 * 60_000).toISOString(),
