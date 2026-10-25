@@ -12,7 +12,7 @@ import { MergeTagMenu, SaveTemplateButton, TemplatePicker } from "./templates";
 import { smsSegments } from "./hooks";
 import type { Message } from "@/lib/types";
 
-export function SmsComposer({ contactId, disabledReason, onSent, onSettled, autoFocus }: { contactId: string; disabledReason?: string | null; onSent?: () => void; onSettled?: () => void; autoFocus?: boolean }) {
+export function SmsComposer({ contactId, disabledReason, onSent, onSettled, autoFocus, preferredLine }: { contactId: string; disabledReason?: string | null; onSent?: () => void; onSettled?: () => void; autoFocus?: boolean; preferredLine?: string | null }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -21,14 +21,14 @@ export function SmsComposer({ contactId, disabledReason, onSent, onSettled, auto
   const [lines, setLines] = useState<{ lines: string[]; defaultLine: string | null }>({ lines: [], defaultLine: null });
   const [from, setFrom] = useState<string | null>(null);
 
-  // Default to the line this contact last used (so replies stay on one number), else the default line.
+  // Default to the inbox being viewed, else the line this contact last used (so replies stay on one number), else the default line.
   useEffect(() => {
     phoneLinesAction(contactId).then((r) => {
       if (!r.ok) return;
       setLines({ lines: r.data.lines, defaultLine: r.data.defaultLine });
-      setFrom(r.data.suggested);
+      setFrom(preferredLine && r.data.lines.includes(preferredLine) ? preferredLine : r.data.suggested);
     });
-  }, [contactId]);
+  }, [contactId, preferredLine]);
 
   const insert = (tag: string) => {
     const el = ref.current;

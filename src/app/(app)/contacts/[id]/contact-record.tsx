@@ -119,7 +119,16 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
             <FieldRow icon={User} label="Last name"><InlineText value={c.last_name} onSave={(v) => save({ last_name: v })} /></FieldRow>
             <FieldRow icon={Mail} label="Email"><InlineText type="email" value={c.email} onSave={(v) => save({ email: v })}
               display={c.email ? <span className="truncate text-accent">{c.email}</span> : undefined} /></FieldRow>
-            <FieldRow icon={Phone} label="Phone"><InlineText type="tel" value={c.phone} onSave={(v) => save({ phone: v })} display={c.phone ? <span>{fmtPhone(c.phone)}</span> : undefined} /></FieldRow>
+            <FieldRow icon={Phone} label="Phone">
+              <div className="flex min-w-0 items-center gap-1">
+                <InlineText type="tel" value={c.phone} onSave={(v) => save({ phone: v })} display={c.phone ? <span className={cn(c.phone_bad && "text-fg-3 line-through")}>{fmtPhone(c.phone)}</span> : undefined} />
+                {c.phone_bad && (
+                  <button onClick={() => save({ phone_bad: false, phone_bad_at: null })} title="Flagged from a call outcome. Click to clear (editing the number also clears it)." className="shrink-0 cursor-pointer">
+                    <Tag color="red">Bad number ×</Tag>
+                  </button>
+                )}
+              </div>
+            </FieldRow>
             <FieldRow icon={Briefcase} label="Job title"><InlineText value={c.title} onSave={(v) => save({ title: v })} /></FieldRow>
             <FieldRow icon={Building2} label="Company">
               <div className="flex items-center gap-1">

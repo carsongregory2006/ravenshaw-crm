@@ -1,5 +1,6 @@
 "use client";
 import { Time } from "@/components/ui/time";
+import Link from "next/link";
 import { useState } from "react";
 import { PhoneIncoming, PhoneOutgoing, PhoneMissed, Sparkles, Pencil, Phone } from "lucide-react";
 import { toast } from "sonner";
@@ -10,17 +11,10 @@ import { StatusTag, Tag } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { summarizeCallAction, updateCallAction } from "@/lib/actions/comms";
 import { fmtDateTime, fmtPhone, cn, lineLabel } from "@/lib/utils";
+import { DISPOSITIONS, dispositionLabel } from "@/lib/dispositions";
 import type { Call } from "@/lib/types";
 
-export const DISPOSITIONS = [
-  { value: "connected", label: "Connected" },
-  { value: "booked", label: "Booked a meeting" },
-  { value: "callback", label: "Callback requested" },
-  { value: "no_answer", label: "No answer" },
-  { value: "voicemail", label: "Left voicemail" },
-  { value: "not_interested", label: "Not interested" },
-  { value: "wrong_number", label: "Wrong number" },
-];
+export { DISPOSITIONS } from "@/lib/dispositions";
 
 export function fmtDuration(sec?: number | null) {
   if (!sec) return "0:00";
@@ -56,7 +50,7 @@ function CallEditDialog({ call, open, onOpenChange, onSaved }: { call: Call; ope
   );
 }
 
-export function CallRow({ call, onChanged }: { call: Call; onChanged: () => void }) {
+export function CallRow({ call, onChanged, contact }: { call: Call; onChanged: () => void; contact?: { id: string; name: string } | null }) {
   const [editing, setEditing] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const missed = call.status === "missed";
@@ -68,16 +62,16 @@ export function CallRow({ call, onChanged }: { call: Call; onChanged: () => void
     if (!r.ok) return toast.error(r.error);
     onChanged();
   };
-  const disp = DISPOSITIONS.find((d) => d.value === call.disposition)?.label;
+  const disp = dispositionLabel(call.disposition);
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center gap-2">
         <span className={cn("flex size-7 items-center justify-center rounded-full", missed ? "bg-danger-soft text-danger" : "bg-bg-3 text-fg-2")}><Icon className="size-3.5" /></span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-[13px] font-medium">
-            {call.direction === "inbound" ? "Inbound" : "Outbound"} call
+            {contact ? <Link href={`/contacts/${contact.id}`} className="hover:underline">{contact.name}</Link> : <>{call.direction === "inbound" ? "Inbound" : "Outbound"} call</>}
             <StatusTag status={call.status} />
-            {disp && <Tag color="purple">{disp}</Tag>}
+            {disp && <Tag color={call.disposition === "bad_number" ? "red" : "purple"}>{disp}</Tag>}
           </div>
           <div className="text-xs text-fg-3">
             <Time value={call.started_at} format="datetime" /> · {fmtDuration(call.duration_sec)} · {fmtPhone(call.direction === "inbound" ? call.from_number : call.to_number)}

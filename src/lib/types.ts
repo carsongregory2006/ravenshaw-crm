@@ -102,6 +102,8 @@ export interface Contact {
   tags: string[];
   lead_score: number | null;
   do_not_contact: boolean;
+  phone_bad: boolean;
+  phone_bad_at: string | null;
   sms_opt_out: boolean;
   email_opt_out: boolean;
   ai_summary: string | null;

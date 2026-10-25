@@ -6,14 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { MessagesSquare, Search, Phone, ExternalLink, Mail, MessageSquare, PenSquare } from "lucide-react";
 import { Page, PageHeader } from "@/components/ui/page";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/avatar";
 import { Tag } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { useProfile } from "@/components/shell/profile-context";
 import { createClient } from "@/lib/supabase/client";
-import { markConversationReadAction } from "@/lib/actions/comms";
+import { markConversationReadAction, phoneLinesAction } from "@/lib/actions/comms";
 import { cn, contactLabel, feedTime, fmtPhone, lineLabel } from "@/lib/utils";
 import { useContactMessages } from "@/components/comms/hooks";
 import { SmsBubble, SmsComposer, useAutoScroll } from "@/components/comms/sms";
@@ -24,7 +24,11 @@ import type { Channel, Contact, Message } from "@/lib/types";
 
 type ContactLite = Pick<Contact, "id" | "first_name" | "last_name" | "email" | "phone" | "owner_id">;
 type Row = Pick<Message, "id" | "contact_id" | "channel" | "direction" | "subject" | "body" | "created_at" | "read_at" | "from_addr" | "to_addr"> & { contact: ContactLite | null };
-interface Convo { contact: ContactLite; last: Row; unread: number; channels: Set<Channel> }
+interface Convo { contact: ContactLite; last: Row; unread: number; channels: Set<Channel>; line: string | null }
+
+/** Our number on an SMS (the one they texted, or the one we sent from). */
+const rowLine = (r: Pick<Row, "channel" | "direction" | "from_addr" | "to_addr">) => (r.channel === "sms" ? (r.direction === "inbound" ? r.to_addr : r.from_addr) : null);
+const lineCity = (l: string | null) => (l ? lineLabel(l).split(" · ")[0] : "");
 
 export function Inbox() {
   const profile = useProfile();
@@ -38,6 +42,10 @@ export function Inbox() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [q, setQ] = useState("");
   const [newOpen, setNewOpen] = useState(false);
+  const [lines, setLines] = useState<string[]>([]);
+  const [line, setLine] = useState<string>("all");
+
+  useEffect(() => { phoneLinesAction().then((r) => r.ok && setLines(r.data.lines)); }, []);
 
   const load = useCallback(async () => {
     const { data } = await createClient().from("messages")
@@ -64,8 +72,10 @@ export function Inbox() {
     const map = new Map<string, Convo>();
     for (const r of rows) {
       if (!r.contact) continue;
+      if (line !== "all" && rowLine(r) !== line) continue;
       let c = map.get(r.contact.id);
-      if (!c) { c = { contact: r.contact, last: r, unread: 0, channels: new Set() }; map.set(r.contact.id, c); }
+      if (!c) { c = { contact: r.contact, last: r, unread: 0, channels: new Set(), line: null }; map.set(r.contact.id, c); }
+      if (!c.line) c.line = rowLine(r); // newest SMS line for this contact
       c.channels.add(r.channel);
       if (r.direction === "inbound" && !r.read_at) c.unread++;
     }
@@ -76,19 +86,31 @@ export function Inbox() {
       (!unreadOnly || c.unread > 0) &&
       (!needle || [contactLabel(c.contact), c.contact.email, c.contact.phone].some((s) => s?.toLowerCase().includes(needle))),
     );
-  }, [rows, channel, scope, unreadOnly, q, profile.id]);
+  }, [rows, channel, scope, unreadOnly, q, profile.id, line]);
 
-  const totalUnread = useMemo(() => rows.filter((r) => r.direction === "inbound" && !r.read_at).length, [rows]);
+  const totalUnread = useMemo(() => rows.filter((r) => r.direction === "inbound" && !r.read_at && (line === "all" || rowLine(r) === line)).length, [rows, line]);
+  const unreadByLine = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) if (r.direction === "inbound" && !r.read_at && rowLine(r)) m.set(rowLine(r)!, (m.get(rowLine(r)!) ?? 0) + 1);
+    return m;
+  }, [rows]);
   const select = (id: string) => router.replace(`/inbox?c=${id}`, { scroll: false });
 
   return (
     <Page>
       <PageHeader icon={MessagesSquare} title="Inbox" actions={<Button size="sm" variant="primary" icon={PenSquare} onClick={() => setNewOpen(true)}>New message</Button>}>
+        {line !== "all" && <Tag color="gray">{lineLabel(line)}</Tag>}
         {totalUnread > 0 && <Tag color="blue">{totalUnread} unread</Tag>}
       </PageHeader>
       <div className="flex min-h-0 flex-1">
         <div className="flex w-[320px] shrink-0 flex-col border-r border-border">
           <div className="space-y-2 border-b border-border-light p-2">
+            {lines.length > 1 && (
+              <Select value={line} onChange={(e) => setLine(e.target.value)} aria-label="Inbox number" className="h-8 text-[13px] font-medium">
+                <option value="all">All inboxes</option>
+                {lines.map((l) => <option key={l} value={l}>{lineLabel(l)}{unreadByLine.get(l) ? ` (${unreadByLine.get(l)} unread)` : ""}</option>)}
+              </Select>
+            )}
             <div className="relative">
               <Search className="absolute left-2 top-2 size-4 text-fg-4" />
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search conversations" className="pl-7" />
@@ -118,6 +140,7 @@ export function Inbox() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
                       <span className={cn("truncate text-[13px]", c.unread ? "font-semibold" : "font-medium")}>{contactLabel(c.contact)}</span>
+                      {line === "all" && c.line && <span className="shrink-0 rounded-sm bg-bg-3 px-1 text-[10px] text-fg-3" title={lineLabel(c.line)}>{lineCity(c.line)}</span>}
                       <span className="ml-auto shrink-0 text-[11px] text-fg-4"><Time value={c.last.created_at} format="feed" /></span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -125,9 +148,6 @@ export function Inbox() {
                       <span className={cn("truncate text-xs", c.unread ? "text-fg" : "text-fg-3")}>
                         {c.last.direction === "outbound" && "You: "}{c.last.channel === "email" ? c.last.subject : c.last.body}
                       </span>
-                      {c.last.channel === "sms" && (c.last.direction === "inbound" ? c.last.to_addr : c.last.from_addr) && (
-                        <span className="ml-auto shrink-0 text-[10px] text-fg-4" title="Your number on this conversation">{lineLabel(c.last.direction === "inbound" ? c.last.to_addr : c.last.from_addr).split(" · ")[0]}</span>
-                      )}
                       {c.unread > 0 && <span className="ml-auto shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-semibold text-white">{c.unread}</span>}
                     </div>
                   </div>
@@ -136,7 +156,7 @@ export function Inbox() {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          {selectedId ? <Conversation key={selectedId} contactId={selectedId} onRead={(id) => setRows((rs) => rs.map((r) => (r.contact?.id === id && r.direction === "inbound" && !r.read_at ? { ...r, read_at: new Date().toISOString() } : r)))} /> : (
+          {selectedId ? <Conversation key={`${selectedId}-${line}`} contactId={selectedId} line={line === "all" ? null : line} onRead={(id) => setRows((rs) => rs.map((r) => (r.contact?.id === id && r.direction === "inbound" && !r.read_at ? { ...r, read_at: new Date().toISOString() } : r)))} /> : (
             <EmptyState icon={MessagesSquare} title="Select a conversation" description="Pick a conversation on the left, or start a new one." className="h-full"
               action={<Button icon={PenSquare} onClick={() => setNewOpen(true)}>New message</Button>} />
           )}
@@ -147,7 +167,7 @@ export function Inbox() {
   );
 }
 
-function Conversation({ contactId, onRead }: { contactId: string; onRead?: (contactId: string) => void }) {
+function Conversation({ contactId, line, onRead }: { contactId: string; line: string | null; onRead?: (contactId: string) => void }) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [missing, setMissing] = useState(false);
   const { messages, loading } = useContactMessages(contactId);
@@ -218,7 +238,7 @@ function Conversation({ contactId, onRead }: { contactId: string; onRead?: (cont
         ))}
       </div>
       {mode === "sms"
-        ? <SmsComposer contactId={contact.id} disabledReason={sReason} autoFocus />
+        ? <SmsComposer contactId={contact.id} disabledReason={sReason} preferredLine={line} autoFocus />
         : eReason
           ? <SmsComposer contactId={contact.id} disabledReason={eReason} />
           : <EmailComposer compact contactId={contact.id} to={contact.email!} initialSubject={replySubject(lastEmail?.subject)} />}

@@ -80,8 +80,11 @@ function CallsTab({ contact }: { contact: Contact }) {
   const dialer = useDialer();
   const reason = callBlockReason(contact);
   return (
+    <>
+    {contact.phone_bad && <Warning text="This number was marked Bad number on a call. Update the phone number (or clear the flag on the profile) before calling again." />}
     <CallList calls={calls} loading={loading} onChanged={reload} callDisabled={reason}
       onCall={() => contact.phone && dialer.call({ phone: contact.phone, contactId: contact.id, name: contactLabel(contact) })} />
+    </>
   );
 }
 

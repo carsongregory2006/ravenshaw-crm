@@ -7,6 +7,7 @@ import { sendEmailToContact, sendSmsToContact, findContact } from "@/lib/comms";
 import { chat, chatJson } from "@/lib/integrations/openrouter";
 import { logActivity } from "@/lib/activity";
 import { lastUsedLine, ourLines, resolveLine } from "@/lib/phone-lines";
+import { DISPOSITION_VALUES, dispositionLabel } from "@/lib/dispositions";
 import { contactLabel, toE164 } from "@/lib/utils";
 import type { Channel, Contact, Direction } from "@/lib/types";
 
@@ -206,6 +207,7 @@ export async function updateCallAction(id: string, patch: {
     if (patch.notes !== undefined) upd.notes = patch.notes;
     if (patch.telnyxCallId && !call.telnyx_call_id) upd.telnyx_call_id = patch.telnyxCallId;
     if (patch.ended && !call.ended_at) upd.ended_at = new Date().toISOString();
+    if (patch.disposition && !DISPOSITION_VALUES.includes(patch.disposition)) throw new Error("Unknown call outcome");
     const admin = createAdminClient();
     await admin.from("calls").update(upd).eq("id", id);
 
@@ -218,12 +220,17 @@ export async function updateCallAction(id: string, patch: {
       });
       await admin.from("contacts").update({ last_contacted_at: new Date().toISOString() }).eq("id", call.contact_id);
     }
-    if ((patch.disposition || patch.notes) && call.contact_id && !patch.ended) {
+    const outcomeChanged = !!patch.disposition && patch.disposition !== call.disposition;
+    if ((outcomeChanged || patch.notes) && call.contact_id && !patch.ended) {
       await logActivity({
         type: "call", contact_id: call.contact_id, actor_id: uid,
-        title: `Call notes${patch.disposition ? ` · ${patch.disposition.replace(/_/g, " ")}` : ""}`,
-        body: patch.notes ?? null, metadata: { call_id: id },
+        title: outcomeChanged ? `Call outcome: ${dispositionLabel(patch.disposition)}` : "Call notes",
+        body: patch.notes ?? null, metadata: { call_id: id, disposition: patch.disposition ?? call.disposition },
       });
+    }
+    if (outcomeChanged && patch.disposition === "bad_number" && call.contact_id) {
+      await admin.from("contacts").update({ phone_bad: true, phone_bad_at: new Date().toISOString() }).eq("id", call.contact_id);
+      await logActivity({ type: "system", contact_id: call.contact_id, actor_id: uid, title: "Phone number flagged as bad", metadata: { call_id: id } });
     }
     if (call.contact_id) revalidatePath(`/contacts/${call.contact_id}`);
     return null;
