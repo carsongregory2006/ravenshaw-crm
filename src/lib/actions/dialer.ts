@@ -11,6 +11,8 @@ import { ourLines } from "@/lib/phone-lines";
 import { fileContact } from "@/lib/folders";
 import { createCallControlApp, getCredentialConnection, listNumberRouting, setNumberConnection } from "@/lib/integrations/telnyx";
 import { inboundAppId, saveInboundAppId } from "@/lib/telnyx-inbound";
+import * as calendly from "@/lib/integrations/calendly";
+import { recordCalendlyBooking, type Invitee } from "@/lib/calendly-booking";
 import { getDialerSettings } from "@/lib/dialer-settings";
 import { withDefaults, type DialerSettings } from "@/lib/dialer/settings";
 import { callerIdHealth, leadHealth, type Health, type HealthCall } from "@/lib/dialer/health";
@@ -713,5 +715,53 @@ export async function updateLeadAction(input: {
     const { data: s } = await sb.from("dial_sessions").select("list_id").eq("id", input.sessionId).maybeSingle();
     if (s?.list_id) await sb.from("lead_list_items").update({ notes: input.notes?.trim() || null }).eq("list_id", s.list_id).eq("contact_id", input.contactId);
     return { phone, phoneChanged: phone !== c.phone };
+  });
+}
+
+// ───────────── Booking (Calendly) ─────────────
+
+/** Calendly event types to book into (falls back to the workspace's default booking link). */
+export async function bookingOptionsAction() {
+  return safe(async () => {
+    await me();
+    const sb = await createClient();
+    const { data: ws } = await sb.from("workspace_settings").select("default_calendly_url").eq("id", 1).maybeSingle();
+    let eventTypes: { name: string; url: string; duration: number }[] = [];
+    try {
+      eventTypes = (await calendly.listEventTypes()).filter((e) => e.active).map((e) => ({ name: e.name, url: e.scheduling_url, duration: e.duration }));
+    } catch { /* no API token: use the default link only */ }
+    const defaultUrl = (ws?.default_calendly_url as string | null) ?? eventTypes[0]?.url ?? null;
+    return { defaultUrl, eventTypes };
+  });
+}
+
+/** The embedded scheduler reported a booking: record it like the Calendly webhook would (deal → Booked, calendar, timeline). */
+export async function recordDialerBookingAction(contactId: string, inviteeUri: string) {
+  return safe(async () => {
+    await me();
+    if (!/^https:\/\/api\.calendly\.com\//.test(inviteeUri)) throw new Error("Invalid Calendly booking");
+    const sb = await createClient();
+    const { data: c } = await sb.from("contacts").select("id").eq("id", contactId).maybeSingle();
+    if (!c) throw new Error("Contact not found");
+    const inv = (await calendly.getResource(inviteeUri)) as Invitee;
+    // The embed passes the contact id as utm_content; make sure the booking lands on this lead.
+    inv.tracking = { ...(inv.tracking ?? {}), utm_content: contactId };
+    return recordCalendlyBooking(createAdminClient(), inv);
+  });
+}
+
+/** Text or email the lead a prefilled booking link. */
+export async function sendBookingLinkAction(input: { contactId: string; url: string; channel: "sms" | "email"; from?: string | null }) {
+  return safe(async () => {
+    const profile = await me();
+    if (!/^https:\/\/calendly\.com\//.test(input.url)) throw new Error("Invalid booking link");
+    const sb = await createClient();
+    const { data: c } = await sb.from("contacts").select("id").eq("id", input.contactId).maybeSingle();
+    if (!c) throw new Error("Contact not found");
+    const r = input.channel === "sms"
+      ? await sendSmsToContact(input.contactId, `Hi {{first_name|there}}, here's the link to grab a time with us: ${input.url}`, { userId: profile.id, from: input.from })
+      : await sendEmailToContact(input.contactId, "Let's find a time to talk", `Hi {{first_name|there}},\n\nGreat speaking with you. Here's the link to pick a time that works for you:\n${input.url}\n\nTalk soon,\n{{rep_name}}`, { userId: profile.id });
+    if (!r.ok) throw new Error(r.error || "Send failed");
+    return null;
   });
 }

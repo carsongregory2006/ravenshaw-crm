@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  Ban, Building2, CalendarClock, ChevronRight, Loader2, Mic, MicOff, Pause, Phone, PhoneOff, Play, Send, SkipForward, Square, Voicemail, Zap,
+  Ban, Building2, CalendarCheck, CalendarClock, ChevronRight, Loader2, Mic, MicOff, Pause, Phone, PhoneOff, Play, Send, SkipForward, Square, Voicemail, Zap,
 } from "lucide-react";
 import { Page, PageBody, PageHeader } from "@/components/ui/page";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import { cn, fmtPhone, lineLabel, localLine } from "@/lib/utils";
 import type { DialSession, Template } from "@/lib/types";
 import { callingWindow, DEFAULT_DIALER_SETTINGS, type DialerSettings } from "@/lib/dialer/settings";
 import { EditLeadDialog } from "./edit-lead";
+import { BookMeetingDialog } from "./book-meeting";
 
 type Stage = "ready" | "dialing" | "wrapup" | "callback" | "countdown" | "done" | "ended";
 type History = { health: SessionLead["health"]; folderId: string | null; calls: { id: string; direction: string; started_at: string; duration_sec: number | null; status: string; disposition: string | null; notes: string | null }[]; activities: { id: string; type: string; title: string; body: string | null; created_at: string }[] };
@@ -56,6 +57,7 @@ export function SessionRunner({ id }: { id: string }) {
   const [settings, setSettings] = useState<DialerSettings>(DEFAULT_DIALER_SETTINGS);
   const [held, setHeld] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [booking, setBooking] = useState(false);
 
   const [pos, setPos] = useState(0);
   const [stage, setStage] = useState<Stage>("ready");
@@ -256,6 +258,21 @@ export function SessionRunner({ id }: { id: string }) {
     toast.success(`${lead.name} marked Do Not Contact`);
     if (stage === "dialing" || stage === "wrapup") pickOutcome("not_interested");
   };
+  const openBooking = () => {
+    if (stage === "countdown") setPaused(true);
+    setBooking(true);
+  };
+  /** A meeting got booked from the embedded scheduler: log the call as Interested / Booked (without hanging up). */
+  const onBooked = useCallback(async () => {
+    if (stage === "dialing" && p.meta?.dbId) await p.setOutcome("interested");
+    else if (stage === "wrapup") await finish("interested");
+    else if ((stage === "countdown" || stage === "callback") && lastCallId && lastOutcome !== "interested") {
+      const r = await updateCallAction(lastCallId, { disposition: "interested" });
+      if (r.ok) afterOutcome("interested");
+    }
+    if (lead) refreshLead(lead.id);
+  }, [stage, p, finish, lastCallId, lastOutcome, afterOutcome, lead, refreshLead]);
+
   const saveCallback = async () => {
     if (!lead) return;
     const r = await createCallbackTaskAction({ contactId: lead.id, dueAt: new Date(callbackAt).toISOString(), note: notes || null, callId: lastCallId });
@@ -287,13 +304,14 @@ export function SessionRunner({ id }: { id: string }) {
   // ── Keyboard: 1–6 outcomes, S skip, P pause, D DNC, E end, Enter = start / next now ──
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (e: KeyboardEvent) => {
-    if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey || stage === "ended" || confirmEnd) return;
+    if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey || stage === "ended" || confirmEnd || booking || editing) return;
     const k = e.key.toLowerCase();
     const i = Number(k) - 1;
     if (i >= 0 && i < KEY_OUTCOMES.length) { e.preventDefault(); pickOutcome(KEY_OUTCOMES[i]); }
     else if (k === "s") { e.preventDefault(); skip(); }
     else if (k === "p") { e.preventDefault(); if (paused) resume(); else togglePause(); }
     else if (k === "d") { e.preventDefault(); dnc(); }
+    else if (k === "b" && lead) { e.preventDefault(); openBooking(); }
     else if (k === "e") { e.preventDefault(); setConfirmEnd(true); }
     else if (k === "enter") {
       if (stage === "ready" && lead) { e.preventDefault(); resume(); }
@@ -421,6 +439,7 @@ export function SessionRunner({ id }: { id: string }) {
                 <div className="mt-3 border-t border-border-light pt-3">
                   <div className="mb-1.5 flex items-center justify-between text-xs text-fg-3">
                     <span>{stage === "wrapup" ? "Call ended — pick an outcome" : live ? "Outcome (ends the call)" : "Outcome"}</span>
+                    <button onClick={openBooking} className="ml-auto mr-2 inline-flex items-center gap-1 rounded px-1 font-medium text-accent hover:bg-hover cursor-pointer"><CalendarCheck className="size-3" /> Book meeting <Kbd>B</Kbd></button>
                     <button onClick={dnc} className="inline-flex items-center gap-1 rounded px-1 hover:bg-hover hover:text-danger cursor-pointer"><Ban className="size-3" /> Do Not Contact <Kbd>D</Kbd></button>
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
@@ -504,13 +523,16 @@ export function SessionRunner({ id }: { id: string }) {
                 {pos + 1 >= leads.length && <li className="px-3 py-3 text-xs text-fg-3">This is the last lead.</li>}
               </ul>
               <div className="border-t border-border-light px-3 py-2 text-[11px] leading-relaxed text-fg-4">
-                Keys: <Kbd>1</Kbd>–<Kbd>6</Kbd> outcome · <Kbd>S</Kbd> skip · <Kbd>P</Kbd> pause · <Kbd>D</Kbd> DNC · <Kbd>E</Kbd> end · <Kbd>Enter</Kbd> start/next
+                Keys: <Kbd>1</Kbd>–<Kbd>6</Kbd> outcome · <Kbd>B</Kbd> book · <Kbd>S</Kbd> skip · <Kbd>P</Kbd> pause · <Kbd>D</Kbd> DNC · <Kbd>E</Kbd> end · <Kbd>Enter</Kbd> start/next
               </div>
             </Card>
           </div>
         )}
       </PageBody>
 
+      {booking && lead && (
+        <BookMeetingDialog lead={lead} from={fromFor(lead)} onClose={() => setBooking(false)} onBooked={onBooked} />
+      )}
       {editing && lead && (
         <EditLeadDialog lead={lead} sessionId={id} onClose={() => setEditing(false)}
           onSaved={(patch) => setLeads((ls) => ls.map((x) => (x.id === lead.id ? { ...x, ...patch } : x)))} />
