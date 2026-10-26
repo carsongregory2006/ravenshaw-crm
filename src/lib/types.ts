@@ -104,6 +104,8 @@ export interface Contact {
   do_not_contact: boolean;
   phone_bad: boolean;
   phone_bad_at: string | null;
+  folder_id: string | null;
+  folder_updated_at: string | null;
   sms_opt_out: boolean;
   email_opt_out: boolean;
   ai_summary: string | null;
@@ -369,6 +371,18 @@ export interface Call {
   ended_at: string | null;
   dial_session_id: string | null;
   voicemail_drop_id: string | null;
+}
+
+export type FolderKey = "new" | "attempted" | "contacted" | "callback" | "interested" | "not_interested" | "bad_dnc";
+
+export interface ContactFolder {
+  id: string;
+  name: string;
+  color: string;
+  system_key: FolderKey | null;
+  position: number;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface LeadList {

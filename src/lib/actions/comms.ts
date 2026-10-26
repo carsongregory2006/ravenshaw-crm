@@ -8,6 +8,7 @@ import { chat, chatJson } from "@/lib/integrations/openrouter";
 import { logActivity } from "@/lib/activity";
 import { lastUsedLine, ourLines, resolveLine } from "@/lib/phone-lines";
 import { DISPOSITION_VALUES, dispositionLabel } from "@/lib/dispositions";
+import { fileContact, fileContactForOutcome } from "@/lib/folders";
 import { contactLabel, toE164 } from "@/lib/utils";
 import type { Channel, Contact, Direction } from "@/lib/types";
 
@@ -226,6 +227,8 @@ export async function updateCallAction(id: string, patch: {
         metadata: { call_id: id, status: patch.status ?? call.status },
       });
       await admin.from("contacts").update({ last_contacted_at: new Date().toISOString() }).eq("id", call.contact_id);
+      // A real conversation files them under Contacted (outcomes below can move them further).
+      if ((patch.durationSec ?? 0) >= 15) await fileContact(call.contact_id, "contacted");
     }
     const outcomeChanged = !!patch.disposition && patch.disposition !== call.disposition;
     if ((outcomeChanged || patch.notes) && call.contact_id && !patch.ended) {
@@ -235,6 +238,7 @@ export async function updateCallAction(id: string, patch: {
         body: patch.notes ?? null, metadata: { call_id: id, disposition: patch.disposition ?? call.disposition },
       });
     }
+    if (outcomeChanged && call.contact_id) await fileContactForOutcome(call.contact_id, patch.disposition!);
     // Power dialer: keep the lead list in step with the outcome.
     if (outcomeChanged && call.dial_session_id && call.contact_id) {
       const { data: sess } = await admin.from("dial_sessions").select("list_id").eq("id", call.dial_session_id).maybeSingle();

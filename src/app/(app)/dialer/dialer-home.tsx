@@ -19,6 +19,7 @@ import { cn, contactLabel, fmtPhone, lineLabel } from "@/lib/utils";
 import type { LeadList, VoicemailDrop } from "@/lib/types";
 import { ContactsListDialog, LeadImportDialog } from "./lead-import";
 import { VoicemailManager } from "./voicemails";
+import { CallerIdHealthCard, FoldersCard, useCallerIdHealth, useFolders } from "./folders";
 
 type ListRow = LeadList & { total: number; pending: number; called: number; skipped: number };
 
@@ -32,6 +33,9 @@ export function DialerHome() {
   const [importOpen, setImportOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [viewList, setViewList] = useState<ListRow | null>(null);
+  const { folders, reload: reloadFolders } = useFolders();
+  const lineHealth = useCallerIdHealth();
+  const healthOf = (l: string) => lineHealth.find((h) => h.line === l)?.score;
 
   // Session setup
   const [listId, setListId] = useState("");
@@ -74,10 +78,10 @@ export function DialerHome() {
     phoneLinesAction().then((r) => { if (r.ok) { setLines(r.data.lines); setDefaultLine(r.data.defaultLine); } });
   }, [load]);
 
-  const start = async (opts: { listId: string; contactIds?: string[] }) => {
+  const start = async (opts: { listId: string | null; contactIds?: string[]; name?: string }) => {
     setStarting(true);
     const r = await startSessionAction({
-      listId: opts.listId, contactIds: opts.contactIds ?? null, onlyPending: opts.contactIds?.length ? false : onlyPending,
+      listId: opts.listId, contactIds: opts.contactIds ?? null, name: opts.name ?? null, onlyPending: opts.contactIds?.length ? false : onlyPending,
       fromMode: from === "local" ? "local" : "fixed", fromNumber: from === "local" ? defaultLine : from,
       thresholdSec: threshold, advanceDelaySec: delay, voicemailDropId: voicemailId || null,
     });
@@ -109,7 +113,7 @@ export function DialerHome() {
                 <Field label="Call from" hint={from === "local" ? "Uses your number closest to each lead's area code (falls back to your default)." : undefined}>
                   <Select value={from} onChange={(e) => setFrom(e.target.value)}>
                     <option value="local">Local presence (auto-match area code)</option>
-                    {lines.map((l) => <option key={l} value={l}>{lineLabel(l)}{l === defaultLine ? " (default)" : ""}</option>)}
+                    {lines.map((l) => <option key={l} value={l}>{lineLabel(l)}{l === defaultLine ? " (default)" : ""}{healthOf(l) ? ` · health ${healthOf(l)}/5` : ""}</option>)}
                   </Select>
                 </Field>
                 <Field label="Voicemail drop" hint="Plays when you press Left VM (key 2) during a call.">
@@ -132,6 +136,9 @@ export function DialerHome() {
                 </Button>
               </div>
             </Card>
+            <FoldersCard folders={folders} reload={reloadFolders} starting={starting}
+              onDial={(ids, name) => start({ listId: null, contactIds: ids, name })} />
+            <CallerIdHealthCard rows={lineHealth} />
             <VoicemailManager voicemails={voicemails} onChanged={load} />
           </div>
 

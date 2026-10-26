@@ -8,8 +8,10 @@ import { logActivity } from "@/lib/activity";
 import { sendEmailToContact, sendSmsToContact } from "@/lib/comms";
 import { computeStats, type CallLite } from "@/lib/dialer/stats";
 import { ourLines } from "@/lib/phone-lines";
+import { fileContact } from "@/lib/folders";
+import { callerIdHealth, leadHealth, type Health, type HealthCall } from "@/lib/dialer/health";
 import { contactLabel, toE164 } from "@/lib/utils";
-import type { Contact, DialSession } from "@/lib/types";
+import type { Contact, ContactFolder, DialSession } from "@/lib/types";
 
 async function me() {
   const p = await getProfile();
@@ -181,7 +183,7 @@ export async function resetListAction(listId: string) {
 // ───────────── Sessions ─────────────
 
 export async function startSessionAction(input: {
-  listId?: string | null; contactIds?: string[] | null; onlyPending: boolean; fromMode: "fixed" | "local"; fromNumber: string | null;
+  listId?: string | null; contactIds?: string[] | null; name?: string | null; onlyPending: boolean; fromMode: "fixed" | "local"; fromNumber: string | null;
   thresholdSec: number; advanceDelaySec: number; voicemailDropId?: string | null;
 }) {
   return safe(async () => {
@@ -222,7 +224,7 @@ export async function startSessionAction(input: {
     if (!ids.length) throw new Error(input.onlyPending ? "No uncalled leads left in this list — reset it or untick “Only leads not called yet”" : "No dialable leads");
 
     if (!listId) {
-      const { data: list, error } = await admin.from("lead_lists").insert({ name: `Quick session ${new Date().toLocaleDateString("en-CA")}`, source: "quick", created_by: profile.id }).select("id, name").single();
+      const { data: list, error } = await admin.from("lead_lists").insert({ name: input.name?.trim() || `Quick session ${new Date().toLocaleDateString("en-CA")}`, source: "quick", created_by: profile.id }).select("id, name").single();
       if (error) throw new Error(error.message);
       listId = list.id;
       listName = list.name;
@@ -253,6 +255,19 @@ export interface SessionLead {
   smsOptOut: boolean;
   lastOutcome: string | null;
   lastCalledAt: string | null;
+  folderId: string | null;
+  health: Health;
+}
+
+/** Number health for a set of contacts, from their call history. */
+async function healthFor(contacts: { id: string; phone_bad: boolean; do_not_contact: boolean }[]) {
+  const admin = createAdminClient();
+  const byContact = new Map<string, HealthCall[]>();
+  for (const part of chunk(contacts.map((c) => c.id), 200)) {
+    const { data } = await admin.from("calls").select("contact_id, direction, started_at, duration_sec, status, disposition").in("contact_id", part).order("started_at", { ascending: false }).limit(5000);
+    for (const c of data ?? []) byContact.set(c.contact_id, [...(byContact.get(c.contact_id) ?? []), c as HealthCall]);
+  }
+  return new Map(contacts.map((c) => [c.id, leadHealth(byContact.get(c.id) ?? [], { phoneBad: c.phone_bad, doNotContact: c.do_not_contact })]));
 }
 
 export async function loadSessionAction(id: string) {
@@ -265,11 +280,14 @@ export async function loadSessionAction(id: string) {
     const admin = createAdminClient();
     const leads = new Map<string, SessionLead>();
     for (const part of chunk(s.queue, 300)) {
-      const { data } = await admin.from("contacts").select("id, first_name, last_name, email, phone, title, status, do_not_contact, phone_bad, sms_opt_out, company:companies(name)").in("id", part);
-      for (const c of (data ?? []) as unknown as (Contact & { company: { name: string } | null })[]) {
+      const { data } = await admin.from("contacts").select("id, first_name, last_name, email, phone, title, status, do_not_contact, phone_bad, sms_opt_out, folder_id, company:companies(name)").in("id", part);
+      const rows = (data ?? []) as unknown as (Contact & { company: { name: string } | null })[];
+      const health = await healthFor(rows);
+      for (const c of rows) {
         leads.set(c.id, {
           id: c.id, name: contactLabel(c) || "Unnamed", phone: c.phone, email: c.email, company: c.company?.name ?? null, title: c.title, status: c.status,
           notes: null, doNotContact: c.do_not_contact, phoneBad: c.phone_bad, smsOptOut: c.sms_opt_out, lastOutcome: null, lastCalledAt: null,
+          folderId: c.folder_id, health: health.get(c.id)!,
         });
       }
     }
@@ -295,16 +313,114 @@ export async function loadSessionAction(id: string) {
   });
 }
 
-/** Recent calls and timeline for the lead card. */
+/** Recent calls and timeline for the lead card, plus fresh number health and folder. */
 export async function leadHistoryAction(contactId: string) {
   return safe(async () => {
     await me();
     const sb = await createClient();
-    const [{ data: calls }, { data: acts }] = await Promise.all([
-      sb.from("calls").select("id, direction, started_at, duration_sec, status, disposition, notes, from_number").eq("contact_id", contactId).order("started_at", { ascending: false }).limit(6),
+    const [{ data: calls }, { data: acts }, { data: c }] = await Promise.all([
+      sb.from("calls").select("id, direction, started_at, duration_sec, status, disposition, notes, from_number").eq("contact_id", contactId).order("started_at", { ascending: false }).limit(100),
       sb.from("activities").select("id, type, title, body, created_at").eq("contact_id", contactId).neq("type", "call").order("created_at", { ascending: false }).limit(6),
+      sb.from("contacts").select("phone_bad, do_not_contact, folder_id").eq("id", contactId).maybeSingle(),
     ]);
-    return { calls: calls ?? [], activities: acts ?? [] };
+    const health = leadHealth((calls ?? []) as HealthCall[], { phoneBad: c?.phone_bad, doNotContact: c?.do_not_contact });
+    return { calls: (calls ?? []).slice(0, 6), activities: acts ?? [], health, folderId: (c?.folder_id as string | null) ?? null };
+  });
+}
+
+// ───────────── Folders ─────────────
+
+/** Folders with how many people are in each (people with no folder count as New). */
+export async function foldersAction() {
+  return safe(async () => {
+    await me();
+    const sb = await createClient();
+    const { data: folders } = await sb.from("contact_folders").select("*").order("position").order("name");
+    const list = (folders ?? []) as ContactFolder[];
+    const counts = await Promise.all(list.map(async (f) => {
+      let q = sb.from("contacts").select("id", { count: "exact", head: true });
+      q = f.system_key === "new" ? q.or(`folder_id.is.null,folder_id.eq.${f.id}`) : q.eq("folder_id", f.id);
+      const { count } = await q;
+      return count ?? 0;
+    }));
+    return list.map((f, i) => ({ ...f, count: counts[i] }));
+  });
+}
+
+export async function createFolderAction(name: string, color: string) {
+  return safe(async () => {
+    const profile = await me();
+    if (!name.trim()) throw new Error("Name the folder");
+    const sb = await createClient();
+    const { data, error } = await sb.from("contact_folders").insert({ name: name.trim(), color, created_by: profile.id }).select("id").single();
+    if (error) throw new Error(error.message);
+    return { id: data.id as string };
+  });
+}
+
+export async function renameFolderAction(id: string, name: string) {
+  return safe(async () => {
+    await me();
+    if (!name.trim()) throw new Error("Name the folder");
+    const sb = await createClient();
+    const { error, count } = await sb.from("contact_folders").update({ name: name.trim() }, { count: "exact" }).eq("id", id);
+    if (error) throw new Error(error.message);
+    if (!count) throw new Error("Built-in folders can't be renamed");
+    return null;
+  });
+}
+
+/** Move people into a folder by hand (any folder, including built-in ones). */
+export async function moveToFolderAction(contactIds: string[], folderId: string) {
+  return safe(async () => {
+    await me();
+    if (!contactIds.length) throw new Error("Select at least one person");
+    const sb = await createClient();
+    let moved = 0;
+    for (const part of chunk(contactIds, 300)) {
+      const { error, count } = await sb.from("contacts").update({ folder_id: folderId, folder_updated_at: new Date().toISOString() }, { count: "exact" }).in("id", part);
+      if (error) throw new Error(error.message);
+      moved += count ?? 0;
+    }
+    revalidatePath("/dialer");
+    return { moved };
+  });
+}
+
+/** People in a folder, with number health. */
+export async function folderContactsAction(folderId: string) {
+  return safe(async () => {
+    await me();
+    const sb = await createClient();
+    const { data: f } = await sb.from("contact_folders").select("id, system_key").eq("id", folderId).maybeSingle();
+    if (!f) throw new Error("Folder not found");
+    let q = sb.from("contacts").select("id, first_name, last_name, email, phone, status, do_not_contact, phone_bad, folder_updated_at, company:companies(name)")
+      .order("folder_updated_at", { ascending: false, nullsFirst: false }).limit(1000);
+    q = f.system_key === "new" ? q.or(`folder_id.is.null,folder_id.eq.${f.id}`) : q.eq("folder_id", f.id);
+    const { data } = await q;
+    const rows = (data ?? []) as unknown as (Contact & { company: { name: string } | null })[];
+    const health = await healthFor(rows);
+    return rows.map((c) => ({
+      id: c.id, name: contactLabel(c), phone: c.phone, company: c.company?.name ?? null, status: c.status,
+      doNotContact: c.do_not_contact, phoneBad: c.phone_bad, movedAt: c.folder_updated_at, health: health.get(c.id)!,
+    }));
+  });
+}
+
+/** 1–5 health for each of our caller IDs, from the last ~5 weeks of outbound calls. */
+export async function callerIdHealthAction() {
+  return safe(async () => {
+    await me();
+    const { lines } = await ourLines();
+    const since = new Date(Date.now() - 37 * 86_400_000).toISOString();
+    const admin = createAdminClient();
+    const byLine = new Map<string, HealthCall[]>(lines.map((l) => [l, []]));
+    for (let page = 0; page < 20; page++) {
+      const { data } = await admin.from("calls").select("from_number, started_at, duration_sec, status, disposition").eq("direction", "outbound").gte("started_at", since).range(page * 1000, page * 1000 + 999);
+      for (const c of data ?? []) if (c.from_number && byLine.has(c.from_number)) byLine.get(c.from_number)!.push(c as HealthCall);
+      if (!data || data.length < 1000) break;
+    }
+    return lines.map((line) => ({ line, ...callerIdHealth(byLine.get(line)!) }));
   });
 }
 
@@ -357,6 +473,7 @@ export async function markDncAction(contactId: string) {
     if (error) throw new Error(error.message);
     if (!count) throw new Error("Contact not found");
     await logActivity({ type: "system", contact_id: contactId, actor_id: profile.id, title: "Marked Do Not Contact (power dialer)" });
+    await fileContact(contactId, "bad_dnc");
     return null;
   });
 }

@@ -27,6 +27,9 @@ import { TasksList } from "@/components/records/tasks-list";
 import { NewDealDialog, ConfirmDialog } from "@/components/records/dialogs";
 import { ContactComms } from "@/components/comms/contact-comms";
 import { useDialer } from "@/components/comms/dialer";
+import { Folder as FolderIcon } from "lucide-react";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import type { ContactFolder } from "@/lib/types";
 import { useIsStaff } from "@/components/shell/profile-context";
 import { updateContact, deleteContacts, type ContactInput } from "@/lib/actions/crm";
 import { generateContactInsights, draftFollowUp, sendDraft } from "@/lib/ai-insights";
@@ -129,6 +132,7 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
                 )}
               </div>
             </FieldRow>
+            <FieldRow icon={FolderIcon} label="Folder"><FolderField value={c.folder_id} onSave={(id) => save({ folder_id: id, folder_updated_at: new Date().toISOString() })} /></FieldRow>
             <FieldRow icon={Briefcase} label="Job title"><InlineText value={c.title} onSave={(v) => save({ title: v })} /></FieldRow>
             <FieldRow icon={Building2} label="Company">
               <div className="flex items-center gap-1">
@@ -407,3 +411,17 @@ function DraftDialog({ open, onOpenChange, contactId, canSms, canEmail }: { open
   );
 }
 
+
+/** Which dialer folder this person lives in (no folder = New). */
+function FolderField({ value, onSave }: { value: string | null; onSave: (id: string) => void }) {
+  const [folders, setFolders] = React.useState<ContactFolder[]>([]);
+  React.useEffect(() => {
+    createBrowserClient().from("contact_folders").select("*").order("position").order("name").then(({ data }) => setFolders((data as ContactFolder[]) ?? []));
+  }, []);
+  const current = value ?? folders.find((f) => f.system_key === "new")?.id ?? "";
+  return (
+    <Select value={current} onChange={(e) => e.target.value && e.target.value !== current && onSave(e.target.value)} className="h-7 border-transparent hover:border-border">
+      {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+    </Select>
+  );
+}

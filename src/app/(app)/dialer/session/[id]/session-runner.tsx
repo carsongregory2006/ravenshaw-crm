@@ -15,10 +15,12 @@ import { Time } from "@/components/ui/time";
 import { StatusLine, usePhone } from "@/components/comms/dialer";
 import { fmtDuration } from "@/components/comms/calls";
 import { SessionSummary } from "@/components/dialer/session-summary";
+import { HealthMeter } from "@/components/dialer/health";
+import { useCallerIdHealth, useFolders } from "../../folders";
 import { createClient } from "@/lib/supabase/client";
 import { phoneLinesAction, updateCallAction } from "@/lib/actions/comms";
 import {
-  createCallbackTaskAction, endSessionAction, leadHistoryAction, loadSessionAction, markDncAction, sendTemplateAction,
+  createCallbackTaskAction, endSessionAction, leadHistoryAction, loadSessionAction, markDncAction, moveToFolderAction, sendTemplateAction,
   setSessionPositionAction, voicemailUrlAction, type SessionLead,
 } from "@/lib/actions/dialer";
 import { DISPOSITIONS, dispositionLabel } from "@/lib/dispositions";
@@ -27,7 +29,7 @@ import { cn, fmtPhone, lineLabel, localLine } from "@/lib/utils";
 import type { DialSession, Template } from "@/lib/types";
 
 type Stage = "ready" | "dialing" | "wrapup" | "callback" | "countdown" | "done" | "ended";
-type History = { calls: { id: string; direction: string; started_at: string; duration_sec: number | null; status: string; disposition: string | null; notes: string | null }[]; activities: { id: string; type: string; title: string; body: string | null; created_at: string }[] };
+type History = { health: SessionLead["health"]; folderId: string | null; calls: { id: string; direction: string; started_at: string; duration_sec: number | null; status: string; disposition: string | null; notes: string | null }[]; activities: { id: string; type: string; title: string; body: string | null; created_at: string }[] };
 
 const KEY_OUTCOMES = DISPOSITIONS.map((d) => d.value); // keys 1–6
 const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
@@ -60,6 +62,14 @@ export function SessionRunner({ id }: { id: string }) {
   const [lastOutcome, setLastOutcome] = useState<string | null>(null);
   const [callbackAt, setCallbackAt] = useState(tomorrowAt10());
   const [history, setHistory] = useState<History | null>(null);
+  const { folders, reload: reloadFolders } = useFolders();
+  const lineHealth = useCallerIdHealth();
+  /** Fresh history, number health and folder for a lead. */
+  const refreshLead = useCallback((contactId: string) => leadHistoryAction(contactId).then((r) => {
+    if (!r.ok) return;
+    setHistory(r.data as History);
+    setLeads((ls) => ls.map((x) => (x.id === contactId ? { ...x, health: r.data.health, folderId: r.data.folderId } : x)));
+  }), []);
   const [templateId, setTemplateId] = useState("");
   const [sending, setSending] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
@@ -102,7 +112,7 @@ export function SessionRunner({ id }: { id: string }) {
   useEffect(() => {
     if (!lead) return setHistory(null);
     setHistory(null);
-    leadHistoryAction(lead.id).then((r) => r.ok && setHistory(r.data as History));
+    refreshLead(lead.id);
   }, [lead?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -152,11 +162,11 @@ export function SessionRunner({ id }: { id: string }) {
     setLastOutcome(disposition);
     setLeads((ls) => ls.map((x, i) => (i === pos ? { ...x, lastOutcome: disposition, phoneBad: x.phoneBad || disposition === "bad_number" } : x)));
     reloadCalls();
-    if (lead) leadHistoryAction(lead.id).then((r) => r.ok && setHistory(r.data as History));
+    if (lead) { refreshLead(lead.id); reloadFolders(); }
     if (disposition === "callback") { setStage("callback"); return; }
     setCountdown(session?.advance_delay_sec ?? 5);
     setStage("countdown");
-  }, [pos, reloadCalls, lead, session?.advance_delay_sec]);
+  }, [pos, reloadCalls, lead, session?.advance_delay_sec, refreshLead, reloadFolders]);
 
   const finish = useCallback(async (disposition: string) => {
     const callId = p.wrapup?.dbId ?? null;
@@ -342,13 +352,32 @@ export function SessionRunner({ id }: { id: string }) {
                       {lead.doNotContact && <Tag color="red">DNC</Tag>}
                       {lead.phoneBad && <Tag color="red">Bad number</Tag>}
                       {lead.lastOutcome && <Tag color="purple">Last: {dispositionLabel(lead.lastOutcome)}</Tag>}
+                      <HealthMeter health={lead.health} label className="ml-1" />
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-fg-2">
                       {(lead.company || lead.title) && <span className="inline-flex items-center gap-1"><Building2 className="size-3.5 text-fg-3" />{[lead.title, lead.company].filter(Boolean).join(" · ")}</span>}
                       <span className="inline-flex items-center gap-1 tabular-nums"><Phone className="size-3.5 text-fg-3" />{fmtPhone(lead.phone)}</span>
                       {lead.email && <span className="text-fg-3">{lead.email}</span>}
                     </div>
-                    {from && <div className="mt-1 text-xs text-fg-3">Calling from {lineLabel(from)}{session.from_mode === "local" ? " (local presence)" : ""}</div>}
+                    {from && (
+                      <div className="mt-1 flex items-center gap-1.5 text-xs text-fg-3">
+                        Calling from {lineLabel(from)}{session.from_mode === "local" ? " (local presence)" : ""}
+                        <HealthMeter health={lineHealth.find((h) => h.line === from)} />
+                      </div>
+                    )}
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-fg-3">
+                      Folder
+                      <Select value={lead.folderId ?? folders.find((f) => f.system_key === "new")?.id ?? ""} className="h-7 w-auto text-xs"
+                        onChange={async (e) => {
+                          const id = e.target.value;
+                          const r = await moveToFolderAction([lead.id], id);
+                          if (!r.ok) return toast.error(r.error);
+                          setLeads((ls) => ls.map((x) => (x.id === lead.id ? { ...x, folderId: id } : x)));
+                          reloadFolders();
+                        }}>
+                        {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                      </Select>
+                    </div>
                     {lead.notes && <p className="mt-2 whitespace-pre-wrap rounded-md bg-bg-2 px-2 py-1.5 text-[13px] text-fg-2">{lead.notes}</p>}
                   </div>
                   <CallStatus stage={stage} paused={paused} countdown={countdown} />
@@ -444,7 +473,7 @@ export function SessionRunner({ id }: { id: string }) {
                   <li key={l.id} className="flex items-center gap-2 border-b border-border-light px-3 py-2 text-[13px] last:border-0">
                     <span className="w-5 text-xs text-fg-4 tabular-nums">{pos + i + 2}</span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{l.name}</div>
+                      <div className="flex items-center gap-1.5"><span className="truncate font-medium">{l.name}</span><HealthMeter health={l.health} /></div>
                       <div className="truncate text-xs text-fg-3">{[l.company, fmtPhone(l.phone)].filter(Boolean).join(" · ")}</div>
                     </div>
                     {l.lastOutcome && <Tag className="shrink-0">{dispositionLabel(l.lastOutcome)}</Tag>}
