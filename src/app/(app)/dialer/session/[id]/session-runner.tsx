@@ -27,6 +27,8 @@ import { DISPOSITIONS, dispositionLabel } from "@/lib/dispositions";
 import { computeStats, fmtSecs, type CallLite, type DialStats } from "@/lib/dialer/stats";
 import { cn, fmtPhone, lineLabel, localLine } from "@/lib/utils";
 import type { DialSession, Template } from "@/lib/types";
+import { callingWindow, DEFAULT_DIALER_SETTINGS, type DialerSettings } from "@/lib/dialer/settings";
+import { EditLeadDialog } from "./edit-lead";
 
 type Stage = "ready" | "dialing" | "wrapup" | "callback" | "countdown" | "done" | "ended";
 type History = { health: SessionLead["health"]; folderId: string | null; calls: { id: string; direction: string; started_at: string; duration_sec: number | null; status: string; disposition: string | null; notes: string | null }[]; activities: { id: string; type: string; title: string; body: string | null; created_at: string }[] };
@@ -51,6 +53,9 @@ export function SessionRunner({ id }: { id: string }) {
   const [lines, setLines] = useState<string[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [vm, setVm] = useState<{ id: string; name: string; url: string | null } | null>(null);
+  const [settings, setSettings] = useState<DialerSettings>(DEFAULT_DIALER_SETTINGS);
+  const [held, setHeld] = useState(0);
+  const [editing, setEditing] = useState(false);
 
   const [pos, setPos] = useState(0);
   const [stage, setStage] = useState<Stage>("ready");
@@ -87,7 +92,8 @@ export function SessionRunner({ id }: { id: string }) {
   useEffect(() => {
     loadSessionAction(id).then(async (r) => {
       if (!r.ok) return setError(r.error);
-      const { session: s, leads: ls, calls: cs, voicemail } = r.data;
+      const { session: s, leads: ls, calls: cs, voicemail, settings: st } = r.data;
+      setSettings(st);
       setSession(s);
       setLeads(ls);
       setCalls(cs);
@@ -133,11 +139,22 @@ export function SessionRunner({ id }: { id: string }) {
       if (next >= leads.length) setStage("done"); else dial(next);
       return;
     }
+    // Calling hours (lead's local time): hold them — they stay "to call" in the list for a later session.
+    const w = callingWindow(l.phone, settings.callingHours);
+    if (!w.allowed) {
+      toast(`Held ${l.name}: it's ${w.localTime} in ${w.city} (calling hours ${w.window})`);
+      setHeld((h) => h + 1);
+      const next = index + 1;
+      setPos(next);
+      await setSessionPositionAction(id, next, null);
+      if (next >= leads.length) setStage("done"); else dial(next);
+      return;
+    }
     setNotes(""); setSavedNotes(""); setLastCallId(null); setLastOutcome(null); setCallbackAt(tomorrowAt10());
     setStage("dialing");
     const ok = await p.call({ phone: l.phone, contactId: l.id, name: l.name }, { from: fromFor(l), dialSessionId: id, stay: true });
     if (!ok) { setStage("ready"); setPaused(true); }
-  }, [session, leads, p, fromFor, id]);
+  }, [session, leads, p, fromFor, id, settings.callingHours]);
 
   const advancing = useRef(false);
   const goTo = useCallback(async (next: number, skipId?: string | null) => {
@@ -336,7 +353,7 @@ export function SessionRunner({ id }: { id: string }) {
 
         {stage === "done" || !lead ? (
           <Card>
-            <EmptyState icon={Zap} title="That's the whole list" description="Every lead in this session has been dialed or skipped. End the session to save your summary."
+            <EmptyState icon={Zap} title="That's the whole list" description={`Every lead in this session has been dialed or skipped.${held ? ` ${held} lead${held === 1 ? " was" : "s were"} held for calling hours and stay in the list to call later.` : ""} End the session to save your summary.`}
               action={<Button variant="primary" loading={ending} onClick={end}>End session &amp; see summary</Button>} />
           </Card>
         ) : (
@@ -348,6 +365,7 @@ export function SessionRunner({ id }: { id: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link href={`/contacts/${lead.id}`} target="_blank" className="text-lg font-semibold hover:underline">{lead.name}</Link>
+                      <Button size="xs" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
                       <Tag className="capitalize">{lead.status}</Tag>
                       {lead.doNotContact && <Tag color="red">DNC</Tag>}
                       {lead.phoneBad && <Tag color="red">Bad number</Tag>}
@@ -378,6 +396,10 @@ export function SessionRunner({ id }: { id: string }) {
                         {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                       </Select>
                     </div>
+                    {(() => {
+                      const w = callingWindow(lead.phone, settings.callingHours);
+                      return <div className={cn("mt-1 text-xs", w.allowed ? "text-fg-3" : "text-warning")}>Their time: {w.localTime} ({w.city}){!w.allowed && ` — outside calling hours ${w.window}`}</div>;
+                    })()}
                     {lead.notes && <p className="mt-2 whitespace-pre-wrap rounded-md bg-bg-2 px-2 py-1.5 text-[13px] text-fg-2">{lead.notes}</p>}
                   </div>
                   <CallStatus stage={stage} paused={paused} countdown={countdown} />
@@ -489,6 +511,10 @@ export function SessionRunner({ id }: { id: string }) {
         )}
       </PageBody>
 
+      {editing && lead && (
+        <EditLeadDialog lead={lead} sessionId={id} onClose={() => setEditing(false)}
+          onSaved={(patch) => setLeads((ls) => ls.map((x) => (x.id === lead.id ? { ...x, ...patch } : x)))} />
+      )}
       <Dialog open={confirmEnd} onOpenChange={setConfirmEnd} size="sm" title="End this session?"
         description={live ? "The current call will be hung up." : "You'll see the session summary next."}
         footer={<><Button onClick={() => setConfirmEnd(false)}>Keep dialing</Button><Button variant="danger" loading={ending} onClick={end}>End session</Button></>} />

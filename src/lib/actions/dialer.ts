@@ -9,6 +9,10 @@ import { sendEmailToContact, sendSmsToContact } from "@/lib/comms";
 import { computeStats, type CallLite } from "@/lib/dialer/stats";
 import { ourLines } from "@/lib/phone-lines";
 import { fileContact } from "@/lib/folders";
+import { createCallControlApp, getCredentialConnection, listNumberRouting, setNumberConnection } from "@/lib/integrations/telnyx";
+import { inboundAppId, saveInboundAppId } from "@/lib/telnyx-inbound";
+import { getDialerSettings } from "@/lib/dialer-settings";
+import { withDefaults, type DialerSettings } from "@/lib/dialer/settings";
 import { callerIdHealth, leadHealth, type Health, type HealthCall } from "@/lib/dialer/health";
 import { contactLabel, toE164 } from "@/lib/utils";
 import type { Contact, ContactFolder, DialSession } from "@/lib/types";
@@ -202,7 +206,8 @@ export async function startSessionAction(input: {
       if (!list) throw new Error("List not found");
       listName = list.name;
       let q = sb.from("lead_list_items").select("contact_id, status").eq("list_id", listId).order("position").limit(5000);
-      if (input.onlyPending) q = q.eq("status", "pending");
+      // Recycled leads wait until their call-again time.
+      if (input.onlyPending) q = q.eq("status", "pending").or(`available_at.is.null,available_at.lte.${new Date().toISOString()}`);
       const { data } = await q;
       ids = (data ?? []).map((d) => d.contact_id);
       if (input.contactIds?.length) {
@@ -305,6 +310,7 @@ export async function loadSessionAction(id: string) {
       s.voicemail_drop_id ? admin.from("voicemail_drops").select("id, name").eq("id", s.voicemail_drop_id).maybeSingle() : Promise.resolve({ data: null }),
     ]);
     return {
+      settings: await getDialerSettings(),
       session: s,
       leads: s.queue.map((cid) => leads.get(cid)).filter((l): l is SessionLead => !!l),
       calls: (calls ?? []) as (CallLite & { id: string; contact_id: string | null })[],
@@ -576,5 +582,136 @@ export async function coldCallingDataAction(range: { from: string | null; to: st
     if (range.to) sq = sq.lt("started_at", range.to);
     const { data: sessions } = await sq;
     return { calls, sessions: (sessions ?? []) as unknown as (DialSession & { user: { full_name: string | null } | null })[] };
+  });
+}
+
+// ───────────── Settings ─────────────
+
+export async function getDialerSettingsAction() {
+  return safe(async () => {
+    await me();
+    return getDialerSettings();
+  });
+}
+
+export async function saveDialerSettingsAction(next: DialerSettings) {
+  return safe(async () => {
+    const profile = await me();
+    if (profile.role !== "admin" && profile.role !== "ops") throw new Error("Only admins can change dialer settings");
+    const v = withDefaults(next);
+    const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+    for (const k of ["weekdayStart", "weekdayEnd", "weekendStart", "weekendEnd"] as const) if (!hhmm.test(v.callingHours[k])) throw new Error("Calling hours must be HH:MM");
+    v.recycle.delayHours = Math.max(0, Math.min(24 * 30, Number(v.recycle.delayHours) || 0));
+    v.recycle.maxAttempts = Math.max(1, Math.min(20, Math.round(Number(v.recycle.maxAttempts) || 5)));
+    v.inbound.ringTimeoutSec = Math.max(10, Math.min(60, Math.round(Number(v.inbound.ringTimeoutSec) || 25)));
+    if (!v.inbound.greetingText.trim()) throw new Error("Add a voicemail greeting");
+    await createAdminClient().from("app_kv").upsert({ key: "dialer_settings", value: v, updated_at: new Date().toISOString() });
+    return v;
+  });
+}
+
+// ───────────── Inbound calls & voicemail (Telnyx routing) ─────────────
+
+async function adminOnly() {
+  const profile = await me();
+  if (profile.role !== "admin" && profile.role !== "ops") throw new Error("Only admins can change phone routing");
+  return profile;
+}
+
+/** Which of our numbers go through the CRM's voicemail app vs straight to the browser dialer. */
+export async function inboundStatusAction() {
+  return safe(async () => {
+    await me();
+    const appId = await inboundAppId();
+    const numbers = await listNumberRouting();
+    const sip = process.env.TELNYX_CONNECTION_ID ?? null;
+    return {
+      appId,
+      numbers: numbers.map((n) => ({ number: n.phone_number, routing: appId && n.connection_id === appId ? "voicemail" : n.connection_id === sip ? "browser" : "other" as "voicemail" | "browser" | "other" })),
+    };
+  });
+}
+
+/**
+ * Turn on CRM voicemail: create (once) a Telnyx Call Control app pointing at our webhook, using the same outbound
+ * profile as the browser dialer, and move our numbers onto it. Outbound calling is unaffected.
+ */
+export async function enableInboundVoicemailAction() {
+  return safe(async () => {
+    await adminOnly();
+    const sip = process.env.TELNYX_CONNECTION_ID;
+    if (!sip) throw new Error("TELNYX_CONNECTION_ID isn't set");
+    const base = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null);
+    if (!base) throw new Error("Set NEXT_PUBLIC_APP_URL so Telnyx knows where to send call events");
+    let appId = await inboundAppId();
+    if (!appId) {
+      const conn = await getCredentialConnection(sip);
+      const app = await createCallControlApp({ name: "ravenshaw-crm-inbound", webhookUrl: `${base}/api/webhooks/telnyx`, outboundVoiceProfileId: conn.data.outbound?.outbound_voice_profile_id ?? null });
+      appId = app.data.id;
+      await saveInboundAppId(appId);
+    }
+    const moved: string[] = [];
+    for (const n of await listNumberRouting()) {
+      if (n.connection_id === sip) { await setNumberConnection(n.id, appId); moved.push(n.phone_number); }
+    }
+    return { appId, moved };
+  });
+}
+
+/** Undo: send our numbers straight to the browser dialer again (no voicemail). */
+export async function disableInboundVoicemailAction() {
+  return safe(async () => {
+    await adminOnly();
+    const sip = process.env.TELNYX_CONNECTION_ID;
+    const appId = await inboundAppId();
+    if (!sip || !appId) throw new Error("CRM voicemail isn't set up");
+    const moved: string[] = [];
+    for (const n of await listNumberRouting()) {
+      if (n.connection_id === appId) { await setNumberConnection(n.id, sip); moved.push(n.phone_number); }
+    }
+    return { moved };
+  });
+}
+
+/** Signed link to play an inbound voicemail. */
+export async function inboundVoicemailUrlAction(callId: string) {
+  return safe(async () => {
+    await me();
+    const sb = await createClient();
+    const { data: c } = await sb.from("calls").select("voicemail_path").eq("id", callId).maybeSingle();
+    if (!c?.voicemail_path) throw new Error("No voicemail on this call");
+    const { data, error } = await createAdminClient().storage.from("voicemails").createSignedUrl(c.voicemail_path, 3600);
+    if (error) throw new Error(error.message);
+    return { url: data.signedUrl };
+  });
+}
+
+/** Edit the lead mid-call: contact fields, company by name, and the list notes. */
+export async function updateLeadAction(input: {
+  contactId: string; sessionId: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null;
+  title: string | null; company: string | null; notes: string | null;
+}) {
+  return safe(async () => {
+    const profile = await me();
+    const sb = await createClient();
+    const { data: c } = await sb.from("contacts").select("id, phone").eq("id", input.contactId).maybeSingle();
+    if (!c) throw new Error("Contact not found");
+    const phone = input.phone?.trim() ? toE164(input.phone) : null;
+    if (input.phone?.trim() && (!phone || phone.replace(/\D/g, "").length < 10)) throw new Error("That phone number doesn't look right");
+    let companyId: string | null | undefined;
+    const companyName = input.company?.trim();
+    if (companyName) {
+      const { data: found } = await sb.from("companies").select("id").ilike("name", companyName).limit(1).maybeSingle();
+      companyId = found?.id ?? (await sb.from("companies").insert({ name: companyName, owner_id: profile.id }).select("id").single()).data?.id ?? null;
+    } else if (input.company !== undefined) companyId = null;
+    const { error } = await sb.from("contacts").update({
+      first_name: input.first_name?.trim() || null, last_name: input.last_name?.trim() || null,
+      email: input.email?.trim().toLowerCase() || null, phone, title: input.title?.trim() || null,
+      ...(companyId !== undefined ? { company_id: companyId } : {}),
+    }).eq("id", input.contactId);
+    if (error) throw new Error(error.message);
+    const { data: s } = await sb.from("dial_sessions").select("list_id").eq("id", input.sessionId).maybeSingle();
+    if (s?.list_id) await sb.from("lead_list_items").update({ notes: input.notes?.trim() || null }).eq("list_id", s.list_id).eq("contact_id", input.contactId);
+    return { phone, phoneChanged: phone !== c.phone };
   });
 }

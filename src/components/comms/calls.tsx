@@ -2,7 +2,7 @@
 import { Time } from "@/components/ui/time";
 import Link from "next/link";
 import { useState } from "react";
-import { PhoneIncoming, PhoneOutgoing, PhoneMissed, Sparkles, Pencil, Phone } from "lucide-react";
+import { PhoneIncoming, PhoneOutgoing, PhoneMissed, Sparkles, Pencil, Phone, Voicemail } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -10,6 +10,7 @@ import { Field, Select, Textarea } from "@/components/ui/input";
 import { StatusTag, Tag } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { summarizeCallAction, updateCallAction } from "@/lib/actions/comms";
+import { inboundVoicemailUrlAction } from "@/lib/actions/dialer";
 import { fmtDateTime, fmtPhone, cn, lineLabel } from "@/lib/utils";
 import { DISPOSITIONS, dispositionLabel } from "@/lib/dispositions";
 import type { Call } from "@/lib/types";
@@ -53,6 +54,12 @@ function CallEditDialog({ call, open, onOpenChange, onSaved }: { call: Call; ope
 export function CallRow({ call, onChanged, contact }: { call: Call; onChanged: () => void; contact?: { id: string; name: string } | null }) {
   const [editing, setEditing] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [vmUrl, setVmUrl] = useState<string | null>(null);
+  const loadVm = async () => {
+    const r = await inboundVoicemailUrlAction(call.id);
+    if (!r.ok) return toast.error(r.error);
+    setVmUrl(r.data.url);
+  };
   const missed = call.status === "missed";
   const Icon = missed ? PhoneMissed : call.direction === "inbound" ? PhoneIncoming : PhoneOutgoing;
   const summarize = async () => {
@@ -72,6 +79,7 @@ export function CallRow({ call, onChanged, contact }: { call: Call; onChanged: (
             {contact ? <Link href={`/contacts/${contact.id}`} className="hover:underline">{contact.name}</Link> : <>{call.direction === "inbound" ? "Inbound" : "Outbound"} call</>}
             <StatusTag status={call.status} />
             {disp && <Tag color={call.disposition === "bad_number" ? "red" : "purple"}>{disp}</Tag>}
+            {call.voicemail_path && <Tag color="orange">Voicemail{call.voicemail_duration_sec ? ` · ${call.voicemail_duration_sec}s` : ""}</Tag>}
           </div>
           <div className="text-xs text-fg-3">
             <Time value={call.started_at} format="datetime" /> · {fmtDuration(call.duration_sec)} · {fmtPhone(call.direction === "inbound" ? call.from_number : call.to_number)}
@@ -81,6 +89,9 @@ export function CallRow({ call, onChanged, contact }: { call: Call; onChanged: (
         <Button size="xs" variant="ghost" icon={Pencil} onClick={() => setEditing(true)}>Outcome</Button>
         <Button size="xs" variant="ghost" icon={Sparkles} loading={summarizing} onClick={summarize} title="Summarize notes/transcript with AI">Summarize</Button>
       </div>
+      {call.voicemail_path && (vmUrl
+        ? <audio controls autoPlay src={vmUrl} className="mt-2 h-8 w-full" />
+        : <Button size="xs" className="mt-2" icon={Voicemail} onClick={loadVm}>Play voicemail</Button>)}
       {call.recording_url && <audio controls preload="none" src={call.recording_url} className="mt-2 h-8 w-full" />}
       {call.notes && <p className="mt-2 whitespace-pre-wrap text-[13px] text-fg-2">{call.notes}</p>}
       {call.ai_summary && (

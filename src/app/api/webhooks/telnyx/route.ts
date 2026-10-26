@@ -5,6 +5,7 @@ import { findContact } from "@/lib/comms";
 import { logActivity, notify, notifyAdmins } from "@/lib/activity";
 import { emitEvent } from "@/lib/events";
 import { chat } from "@/lib/integrations/openrouter";
+import { handleInboundRouting } from "@/lib/telnyx-inbound";
 import { contactLabel, fmtPhone, lineLabel, toE164 } from "@/lib/utils";
 import type { Contact } from "@/lib/types";
 
@@ -129,6 +130,8 @@ async function findCall(db: Db, p: any) {
 }
 
 async function handleCallEvent(db: Db, type: string, p: any) {
+  // Inbound calls through the CRM's Call Control app (ring browser → voicemail) are driven here first.
+  if (await handleInboundRouting(type, p)) return;
   const direction = p.direction === "incoming" ? "inbound" : "outbound";
   const call = await findCall(db, p);
 

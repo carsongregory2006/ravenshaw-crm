@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activity";
 import { lastUsedLine, ourLines, resolveLine } from "@/lib/phone-lines";
 import { DISPOSITION_VALUES, dispositionLabel } from "@/lib/dispositions";
 import { fileContact, fileContactForOutcome } from "@/lib/folders";
+import { recycleForOutcome } from "@/lib/recycle";
 import { contactLabel, toE164 } from "@/lib/utils";
 import type { Channel, Contact, Direction } from "@/lib/types";
 
@@ -247,6 +248,8 @@ export async function updateCallAction(id: string, patch: {
           .eq("list_id", sess.list_id).eq("contact_id", call.contact_id);
       }
     }
+    // After the session-list update above, so a Recycled-list session re-queues the lead.
+    if (outcomeChanged && call.contact_id && call.direction === "outbound") await recycleForOutcome(call.contact_id, patch.disposition!, call.user_id ?? uid);
     if (outcomeChanged && patch.disposition === "bad_number" && call.contact_id) {
       await admin.from("contacts").update({ phone_bad: true, phone_bad_at: new Date().toISOString() }).eq("id", call.contact_id);
       await logActivity({ type: "system", contact_id: call.contact_id, actor_id: uid, title: "Phone number flagged as bad", metadata: { call_id: id } });

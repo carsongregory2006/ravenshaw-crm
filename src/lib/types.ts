@@ -371,6 +371,8 @@ export interface Call {
   ended_at: string | null;
   dial_session_id: string | null;
   voicemail_drop_id: string | null;
+  voicemail_path: string | null;
+  voicemail_duration_sec: number | null;
 }
 
 export type FolderKey = "new" | "attempted" | "contacted" | "callback" | "interested" | "not_interested" | "bad_dnc";

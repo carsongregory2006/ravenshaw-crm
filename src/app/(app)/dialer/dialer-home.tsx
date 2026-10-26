@@ -20,8 +20,11 @@ import type { LeadList, VoicemailDrop } from "@/lib/types";
 import { ContactsListDialog, LeadImportDialog } from "./lead-import";
 import { VoicemailManager } from "./voicemails";
 import { CallerIdHealthCard, FoldersCard, useCallerIdHealth, useFolders } from "./folders";
+import { DialerSettingsPanel } from "./dialer-settings";
 
-type ListRow = LeadList & { total: number; pending: number; called: number; skipped: number };
+type Counts = { total: number; pending: number; waiting: number; called: number; skipped: number };
+type ListRow = LeadList & Counts;
+const ZERO: Counts = { total: 0, pending: 0, waiting: 0, called: 0, skipped: 0 };
 
 export function DialerHome() {
   const router = useRouter();
@@ -45,6 +48,7 @@ export function DialerHome() {
   const [threshold, setThreshold] = useState(30);
   const [delay, setDelay] = useState(5);
   const [starting, setStarting] = useState(false);
+  const [tab, setTab] = useState<"dialer" | "settings">("dialer");
 
   const load = useCallback(async () => {
     const sb = createClient();
@@ -53,20 +57,23 @@ export function DialerHome() {
       sb.from("voicemail_drops").select("*").order("created_at", { ascending: false }),
     ]);
     const ids = (ls ?? []).map((l) => l.id);
-    const counts = new Map<string, { total: number; pending: number; called: number; skipped: number }>();
+    const counts = new Map<string, Counts>();
+    const now = new Date().toISOString();
     if (ids.length) {
       for (let page = 0; page < 30; page++) {
-        const { data } = await sb.from("lead_list_items").select("list_id, status").in("list_id", ids).range(page * 1000, page * 1000 + 999);
+        const { data } = await sb.from("lead_list_items").select("list_id, status, available_at").in("list_id", ids).range(page * 1000, page * 1000 + 999);
         for (const it of data ?? []) {
-          const c = counts.get(it.list_id) ?? { total: 0, pending: 0, called: 0, skipped: 0 };
+          const c = counts.get(it.list_id) ?? { ...ZERO };
           c.total++;
-          c[it.status as "pending" | "called" | "skipped"]++;
+          // Recycled leads count as "to call" only once their call-again time has passed.
+          if (it.status === "pending" && it.available_at && it.available_at > now) c.waiting++;
+          else c[it.status as "pending" | "called" | "skipped"]++;
           counts.set(it.list_id, c);
         }
         if (!data || data.length < 1000) break;
       }
     }
-    const rows = (ls ?? []).map((l) => ({ ...(l as LeadList), ...(counts.get(l.id) ?? { total: 0, pending: 0, called: 0, skipped: 0 }) }));
+    const rows = (ls ?? []).map((l) => ({ ...(l as LeadList), ...(counts.get(l.id) ?? ZERO) }));
     setLists(rows);
     setVoicemails((vms as VoicemailDrop[]) ?? []);
     setListId((cur) => cur || rows[0]?.id || "");
@@ -98,8 +105,17 @@ export function DialerHome() {
         <Link href="/cold-calling"><Button size="sm" variant="ghost" icon={BarChart3}>Dashboard</Button></Link>
         <Button size="sm" icon={ListPlus} onClick={() => setContactsOpen(true)}>List from contacts</Button>
         <Button size="sm" variant="primary" icon={FileUp} onClick={() => setImportOpen(true)}>Import CSV</Button>
-      </>} />
+      </>}>
+        <div className="ml-2 flex items-center gap-0.5">
+          {(["dialer", "settings"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={cn("h-6 rounded-md px-2 text-xs cursor-pointer", tab === t ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover")}>
+              {t === "dialer" ? "Dialer" : "Settings"}
+            </button>
+          ))}
+        </div>
+      </PageHeader>
       <PageBody className="p-4">
+        {tab === "settings" ? <DialerSettingsPanel voicemails={voicemails} /> : (
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
           <div className="space-y-4">
             <Card title="Start a dialing session">
@@ -156,10 +172,10 @@ export function DialerHome() {
                       <tr key={l.id} className="border-b border-border-light last:border-0 hover:bg-hover">
                         <td className="px-3 py-2">
                           <button onClick={() => setViewList(l)} className="font-medium hover:underline cursor-pointer">{l.name}</button>
-                          <Tag className="ml-2" color={l.source === "csv" ? "blue" : l.source === "quick" ? "gray" : "purple"}>{l.source === "csv" ? "CSV" : l.source === "quick" ? "Quick" : "Contacts"}</Tag>
+                          <Tag className="ml-2" color={l.source === "csv" ? "blue" : l.source === "quick" ? "gray" : l.source === "recycled" ? "orange" : "purple"}>{l.source === "csv" ? "CSV" : l.source === "quick" ? "Quick" : l.source === "recycled" ? "Recycled" : "Contacts"}</Tag>
                         </td>
                         <td className="px-3 py-2 tabular-nums">{l.total}</td>
-                        <td className="px-3 py-2 tabular-nums">{l.pending}</td>
+                        <td className="px-3 py-2 tabular-nums">{l.pending}{l.waiting ? <span className="text-fg-4"> · {l.waiting} waiting</span> : null}</td>
                         <td className="px-3 py-2 tabular-nums">{l.called}{l.skipped ? <span className="text-fg-4"> · {l.skipped} skipped</span> : null}</td>
                         <td className="px-3 py-2 text-fg-3"><Time value={l.created_at} format="date" /></td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -176,6 +192,7 @@ export function DialerHome() {
               )}
           </Card>
         </div>
+        )}
       </PageBody>
 
       <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} onDone={(id) => { load(); setListId(id); }} />
@@ -186,7 +203,7 @@ export function DialerHome() {
   );
 }
 
-interface ItemRow { contact_id: string; status: string; last_outcome: string | null; last_called_at: string | null; notes: string | null; contact: { first_name: string | null; last_name: string | null; email: string | null; phone: string | null; do_not_contact: boolean; phone_bad: boolean } | null }
+interface ItemRow { contact_id: string; status: string; last_outcome: string | null; last_called_at: string | null; notes: string | null; added_at: string | null; created_at: string; available_at: string | null; attempts: number; contact: { first_name: string | null; last_name: string | null; email: string | null; phone: string | null; do_not_contact: boolean; phone_bad: boolean } | null }
 
 /** A list's leads; tick some to dial just those. */
 function ListDialog({ list, onClose, onStart, starting }: { list: ListRow; onClose: () => void; onStart: (ids: string[]) => void; starting: boolean }) {
@@ -196,7 +213,7 @@ function ListDialog({ list, onClose, onStart, starting }: { list: ListRow; onClo
   const [q, setQ] = useState("");
   useEffect(() => {
     createClient().from("lead_list_items")
-      .select("contact_id, status, last_outcome, last_called_at, notes, contact:contacts(first_name, last_name, email, phone, do_not_contact, phone_bad)")
+      .select("contact_id, status, last_outcome, last_called_at, notes, added_at, created_at, available_at, attempts, contact:contacts(first_name, last_name, email, phone, do_not_contact, phone_bad)")
       .eq("list_id", list.id).order("position").limit(2000)
       .then(({ data }) => { setItems((data as unknown as ItemRow[]) ?? []); setLoading(false); });
   }, [list.id]);
@@ -219,7 +236,8 @@ function ListDialog({ list, onClose, onStart, starting }: { list: ListRow; onClo
             <tr className="border-b border-border-light">
               <th className="w-8 py-1.5"><Checkbox checked={shown.length > 0 && shown.filter(dialable).every((i) => sel.has(i.contact_id))}
                 onChange={(e) => setSel(e.target.checked ? new Set(shown.filter(dialable).map((i) => i.contact_id)) : new Set())} /></th>
-              <th className="py-1.5 font-medium">Name</th><th className="py-1.5 font-medium">Phone</th><th className="py-1.5 font-medium">Status</th><th className="py-1.5 font-medium">Last outcome</th>
+              <th className="py-1.5 font-medium">Name</th><th className="py-1.5 font-medium">Phone</th><th className="py-1.5 font-medium">Status</th><th className="py-1.5 font-medium">Last outcome</th><th className="py-1.5 font-medium">Added</th>
+              {list.source === "recycled" && <><th className="py-1.5 font-medium">Call again</th><th className="py-1.5 font-medium">Attempts</th></>}
             </tr>
           </thead>
           <tbody>
@@ -231,6 +249,11 @@ function ListDialog({ list, onClose, onStart, starting }: { list: ListRow; onClo
                 <td className="py-1.5 tabular-nums">{fmtPhone(i.contact?.phone)}{i.contact?.phone_bad && <Tag className="ml-1" color="red">Bad</Tag>}{i.contact?.do_not_contact && <Tag className="ml-1" color="red">DNC</Tag>}</td>
                 <td className="py-1.5 capitalize text-fg-3">{i.status}</td>
                 <td className="py-1.5">{dispositionLabel(i.last_outcome) ?? <span className="text-fg-4">—</span>}</td>
+                <td className="py-1.5 text-fg-3"><Time value={i.added_at ?? i.created_at} format="date" /></td>
+                {list.source === "recycled" && <>
+                  <td className="py-1.5 text-fg-3">{i.status !== "pending" ? "—" : i.available_at && new Date(i.available_at) > new Date() ? <Time value={i.available_at} format="datetime" /> : "Now"}</td>
+                  <td className="py-1.5 tabular-nums text-fg-3">{i.attempts}</td>
+                </>}
               </tr>
             ))}
           </tbody>

@@ -89,6 +89,54 @@ export async function createWebRtcToken(): Promise<string> {
   }
 }
 
+// ───────────── Call Control (inbound routing + voicemail) ─────────────
+
+/** Run a Call Control command on a live call leg. */
+export async function callAction(callControlId: string, action: string, body: Record<string, unknown> = {}) {
+  return telnyx(`/calls/${encodeURIComponent(callControlId)}/actions/${action}`, { method: "POST", body: JSON.stringify(body) });
+}
+
+/** Place a new call leg from a Call Control application. */
+export async function dialCall(body: Record<string, unknown>) {
+  return telnyx<{ data: { call_control_id: string; call_session_id: string } }>("/calls", { method: "POST", body: JSON.stringify(body) });
+}
+
+export const encodeState = (o: Record<string, unknown>) => Buffer.from(JSON.stringify(o)).toString("base64");
+export function decodeState(s?: string | null): Record<string, string> | null {
+  if (!s) return null;
+  try { return JSON.parse(Buffer.from(s, "base64").toString("utf8")); } catch { return null; }
+}
+
+/** SIP address that rings the browser dialer (our telephony credential). */
+export async function browserSipUri() {
+  const id = await telephonyCredentialId();
+  const r = await telnyx<{ data: { sip_username: string } }>(`/telephony_credentials/${id}`);
+  return `sip:${r.data.sip_username}@sip.telnyx.com`;
+}
+
+export async function getCredentialConnection(id: string) {
+  return telnyx<{ data: { id: string; outbound?: { outbound_voice_profile_id?: string | null } } }>(`/credential_connections/${id}`);
+}
+
+export async function createCallControlApp(input: { name: string; webhookUrl: string; outboundVoiceProfileId?: string | null }) {
+  return telnyx<{ data: { id: string } }>("/call_control_applications", {
+    method: "POST",
+    body: JSON.stringify({
+      application_name: input.name, webhook_event_url: input.webhookUrl, webhook_api_version: "2", active: true,
+      anchorsite_override: "Latency", ...(input.outboundVoiceProfileId ? { outbound: { outbound_voice_profile_id: input.outboundVoiceProfileId } } : {}),
+    }),
+  });
+}
+
+export async function listNumberRouting() {
+  const r = await telnyx<{ data: { id: string; phone_number: string; connection_id: string | null }[] }>("/phone_numbers?page[size]=250&filter[status]=active");
+  return r.data;
+}
+
+export async function setNumberConnection(numberId: string, connectionId: string) {
+  return telnyx(`/phone_numbers/${numberId}`, { method: "PATCH", body: JSON.stringify({ connection_id: connectionId }) });
+}
+
 /** Verify Telnyx webhook (ed25519). Public key from Telnyx portal → Keys & Credentials → Public Key. */
 export function verifyTelnyxWebhook(rawBody: string, headers: Headers): boolean {
   const pub = process.env.TELNYX_PUBLIC_KEY;
