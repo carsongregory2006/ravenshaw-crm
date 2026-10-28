@@ -4,6 +4,8 @@ import { processRuns } from "@/lib/automations/engine";
 import { runBillingCron } from "@/lib/billing/cron";
 import { syncAllGoogleCalendars } from "@/lib/calendar/google-sync";
 import { dueReminders } from "@/lib/calendar/reminders";
+import { syncCalendly } from "@/lib/calendly-sync";
+import { integrations } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,6 +27,8 @@ async function tick(req: NextRequest) {
   ];
   // Google sync is heavier; run every 5 minutes.
   if (new Date().getMinutes() % 5 === 0) jobs.push(["google", () => syncAllGoogleCalendars()]);
+  // Calendly bookings by polling (its webhooks need a paid plan); offset from the Google sync.
+  if (integrations.calendly() && new Date().getMinutes() % 5 === 2) jobs.push(["calendly", () => syncCalendly()]);
 
   const errors: string[] = [];
   for (const [name, fn] of jobs) {

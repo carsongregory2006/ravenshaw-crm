@@ -81,9 +81,11 @@ function CalendlyActions({ settings }: { settings: WorkspaceSettings }) {
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
-        <Button loading={busy} onClick={() => run(calendlyRegisterWebhook, (m) => toast.success(m))}>Register webhook</Button>
         <Button loading={busy} onClick={() => run(calendlyEventTypes, (t) => { setTypes(t); toast.success(`Loaded ${t.length} event types`); })}>List event types</Button>
+        <Button variant="ghost" loading={busy} title="Instant booking updates. Needs Calendly Standard or higher."
+          onClick={() => run(calendlyRegisterWebhook, (m) => toast.success(m))}>Register webhook (paid Calendly)</Button>
       </div>
+      <p className="text-xs text-fg-3">Bookings sync automatically every 5 minutes. On a paid Calendly plan, registering the webhook makes them instant.</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Default booking link" hint="Used on landing pages and in {{booking_link}}.">
           {types ? (

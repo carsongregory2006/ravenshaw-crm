@@ -28,9 +28,9 @@ export async function listEventTypes() {
   return data.collection;
 }
 
-export async function listScheduledEvents(params: { minStart?: string; maxStart?: string } = {}) {
+export async function listScheduledEvents(params: { minStart?: string; maxStart?: string; status?: "active" | "canceled" } = {}) {
   const me = await getMe();
-  const qs = new URLSearchParams({ user: me.uri, count: "100", status: "active" });
+  const qs = new URLSearchParams({ user: me.uri, count: "100", status: params.status ?? "active" });
   if (params.minStart) qs.set("min_start_time", params.minStart);
   if (params.maxStart) qs.set("max_start_time", params.maxStart);
   const data = await calendly<{ collection: any[] }>(`/scheduled_events?${qs}`);
