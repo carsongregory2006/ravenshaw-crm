@@ -41,9 +41,15 @@ export async function createDocumentFromTemplate(input: CreateDocInput) {
     tokens: Object.entries(input.tokens).map(([name, value]) => ({ name, value: String(value) })),
     metadata: input.metadata,
   };
-  if (input.pricingRows?.length) {
+  // Only fill a pricing table if the template has one (the agreement text can carry the totals instead).
+  const tableName = input.pricingTableName ?? "Pricing Table 1";
+  const hasTable = input.pricingRows?.length
+    ? await pd<{ pricing?: { tables?: { name: string }[] } }>(`/templates/${input.templateId}/details`)
+        .then((t) => (t.pricing?.tables ?? []).some((x) => x.name === tableName)).catch(() => true)
+    : false;
+  if (hasTable && input.pricingRows?.length) {
     body.pricing_tables = [{
-      name: input.pricingTableName ?? "Pricing Table 1",
+      name: tableName,
       data_merge: true,
       sections: [{
         title: "Services",
