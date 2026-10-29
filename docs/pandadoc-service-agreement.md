@@ -9,7 +9,7 @@ How to set it up in PandaDoc (about 10 minutes):
 5. At the bottom, add a **Signature** field and a **Date** field assigned to the **Client** role.
 6. Save, then in the CRM: Settings → Integrations → PandaDoc → pick **Ravenshaw AI Service Agreement** → Save template.
 
-> This is a starting draft, not legal advice. Have a lawyer licensed in Ontario review it before you rely on it.
+> This is a starting draft, not legal advice. Have a lawyer licensed in Québec review it before you rely on it.
 
 ---
 
@@ -17,7 +17,7 @@ How to set it up in PandaDoc (about 10 minutes):
 
 Agreement no. [Deal.Number] · Dated [Date]
 
-**Between:** [Agency.Name] ("Ravenshaw AI", "we"), Ontario, Canada, info@ravenshawai.com
+**Between:** [Agency.Name] ("Ravenshaw AI", "we"), Québec, Canada, info@ravenshawai.com
 
 **And:** [Client.FirstName] [Client.LastName], [Client.Company] ("Client", "you"), [Client.Email]
 
@@ -30,7 +30,7 @@ PRICING TABLE
 
 - One-time setup: [Deal.SetupTotal], due when you sign.
 - Monthly service: [Deal.MonthlyTotal], billed monthly in advance, starting on the go-live date.
-- All amounts are in Canadian dollars, plus applicable taxes (HST).
+- All amounts are in Canadian dollars. No sales tax is charged at this time. If we register to collect GST/QST (or HST), applicable taxes will be added to invoices from that date.
 - We invoice through Stripe. Payment is due within 7 days of the invoice date. We may pause the services if an invoice is more than 15 days overdue.
 
 **3. Term and cancellation**
@@ -52,7 +52,7 @@ Your customer data belongs to you. We use it only to provide the services, keep 
 Our total liability under this agreement is limited to the fees you paid in the 3 months before the claim. Neither party is liable for indirect or consequential losses, including lost profits.
 
 **9. General**
-This agreement is governed by the laws of Ontario and the federal laws of Canada that apply there. It is the entire agreement between us, and changes must be in writing. Electronic signatures are binding.
+This agreement is governed by the laws of the Province of Québec and the federal laws of Canada that apply there. It is the entire agreement between us, and changes must be in writing. Electronic signatures are binding. The parties have expressly requested that this agreement be drawn up in English. *Les parties ont expressément exigé que la présente convention soit rédigée en anglais.*
 
 **Signed for the Client:**
 
