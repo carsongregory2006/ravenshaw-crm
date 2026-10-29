@@ -64,8 +64,8 @@ export default function TermsPage() {
 
       <h2>Governing law</h2>
       <p>
-        These Terms are governed by the laws of the Province of Ontario and the federal laws of Canada applicable there,
-        and the courts of Ontario have exclusive jurisdiction over any dispute.
+        These Terms are governed by the laws of the Province of Québec and the federal laws of Canada applicable there,
+        and the courts of Québec have exclusive jurisdiction over any dispute.
       </p>
 
       <h2>Changes</h2>
