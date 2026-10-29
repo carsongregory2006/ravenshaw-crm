@@ -12,6 +12,6 @@ Next.js 15 CRM for Ravenshaw AI, deployed on Vercel (ravenshaw-crm-6ye2.vercel.a
 
 ## Brand
 
-- Colours: black #000000, white, silver #C7CDD4, steel #6F7780, accent Raven Violet #8B5CF6.
+- Colours: black #000000, white, silver #C7CDD4, steel #6F7780, accent Raven Violet #7C3AED.
 - Fonts: Archivo Black (headlines), Inter (body), Fraunces Italic (quotes).
 - Main line (514) 475-8603, info@ravenshawai.com. Brand guide: `brand/`.
