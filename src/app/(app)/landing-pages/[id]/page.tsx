@@ -1,37 +1,44 @@
 import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { LandingEditor } from "@/components/landing/editor";
-import type { LandingPage, LandingPageVariant, RrMember } from "@/lib/types";
-import type { RepLite } from "@/components/landing/settings-panel";
+import { LanderStats } from "@/components/landing/lander-stats";
+import type { LanderVisit } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { data } = await createAdminClient().from("landing_pages").select("name").eq("id", id).maybeSingle();
-  return { title: data?.name ?? "Landing page" };
+  return { title: data?.name ?? "Lander" };
 }
 
-export default async function LandingEditorPage({ params }: { params: Promise<{ id: string }> }) {
+const RANGES = { "7": 7, "30": 30, "90": 90, all: null } as const;
+
+export default async function LanderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ range?: string }> }) {
   await requireStaff();
   const { id } = await params;
+  const { range: raw } = await searchParams;
+  const range = (raw && raw in RANGES ? raw : "30") as keyof typeof RANGES;
+  const days = RANGES[range];
+
   const db = createAdminClient();
-  const [{ data: page }, { data: variants }, { data: members }, { data: reps }, { data: ws }] = await Promise.all([
-    db.from("landing_pages").select("*").eq("id", id).maybeSingle(),
-    db.from("landing_page_variants").select("*").eq("page_id", id).order("created_at"),
-    db.from("rr_members").select("*").eq("page_id", id),
-    db.from("profiles").select("id, full_name, email, role, available_for_rr, avatar_url").eq("is_active", true).order("full_name"),
-    db.from("workspace_settings").select("default_calendly_url").eq("id", 1).single(),
+  let visitsQ = db.from("lander_visits").select("*").eq("page_id", id).order("started_at").limit(50000);
+  if (days) visitsQ = visitsQ.gte("started_at", new Date(Date.now() - days * 86400_000).toISOString());
+  const [{ data: page }, { data: visits }, { data: lastHit }, { count: crmLeads }] = await Promise.all([
+    db.from("landing_pages").select("id, name, external_url, has_vsl").eq("id", id).maybeSingle(),
+    visitsQ,
+    db.from("lander_visits").select("last_seen_at").eq("page_id", id).order("last_seen_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("contacts").select("id", { count: "exact", head: true }).eq("landing_page_id", id),
   ]);
-  if (!page) notFound();
+  if (!page || !page.external_url) notFound();
+
   return (
-    <LandingEditor
-      initialPage={page as LandingPage}
-      initialVariants={(variants ?? []) as LandingPageVariant[]}
-      initialMembers={(members ?? []) as RrMember[]}
-      reps={(reps ?? []) as RepLite[]}
-      defaultCalendly={ws?.default_calendly_url ?? null}
+    <LanderStats
+      lander={page}
+      visits={(visits ?? []) as LanderVisit[]}
+      range={range}
+      lastHit={lastHit?.last_seen_at ?? null}
+      crmLeads={crmLeads ?? 0}
     />
   );
 }

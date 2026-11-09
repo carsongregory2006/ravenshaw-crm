@@ -546,6 +546,50 @@ export interface LandingPage {
   redirect_url: string | null;
   calendly_url: string | null;
   theme: { accent: string; font: string; mode: "light" | "dark" };
+  external_url: string | null;
+  has_vsl: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LanderVisit {
+  id: string;
+  page_id: string;
+  visitor_id: string | null;
+  variant: string | null;
+  started_at: string;
+  last_seen_at: string;
+  time_on_page_s: number;
+  max_scroll_pct: number;
+  cta_clicks: number;
+  vsl_started: boolean;
+  vsl_watch_s: number;
+  vsl_duration_s: number | null;
+  vsl_max_pct: number;
+  converted: boolean;
+  booked: boolean;
+  referrer: string | null;
+  utm: Record<string, string> | null;
+  device: string | null;
+  country: string | null;
+}
+
+export type NetworkStatus = "idea" | "intro_asked" | "reached_out" | "talking" | "converted" | "not_fit";
+
+export interface NetworkLead {
+  id: string;
+  name: string;
+  business: string | null;
+  phone: string | null;
+  email: string | null;
+  connection: string | null;
+  introduced_by: string | null;
+  warmth: "hot" | "warm" | "cold";
+  status: NetworkStatus;
+  follow_up_on: string | null;
+  notes: string | null;
+  contact_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
