@@ -104,10 +104,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <Page>
       <PageHeader icon={LayoutDashboard} title="Dashboard"
-        actions={<RangePicker value={range.key} label={range.label} from={format(range.from, "yyyy-MM-dd")} to={format(range.to, "yyyy-MM-dd")} />}>
-        <span className="text-xs text-fg-3"><Greeting name={profile.full_name?.split(" ")[0]} /></span>
-      </PageHeader>
+        actions={<RangePicker value={range.key} label={range.label} from={format(range.from, "yyyy-MM-dd")} to={format(range.to, "yyyy-MM-dd")} />} />
       <PageBody className="space-y-3 p-3">
+        <div className="relative overflow-hidden rounded-lg border border-border bg-bg px-4 py-4">
+          <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-accent/15 blur-3xl" />
+          <h2 className="relative min-h-7 font-display text-[22px] leading-tight tracking-tight text-fg">
+            <Greeting name={profile.full_name?.split(" ")[0]} />
+          </h2>
+          <p className="relative mt-1 text-[13px] text-fg-3">{range.label} at a glance.</p>
+        </div>
         {sp.denied && (
           <div className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-[13px] text-fg">
             That page is only available to admins and ops. Ask an admin if you need access.

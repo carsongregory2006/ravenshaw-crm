@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Archivo_Black, Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const archivo = Archivo_Black({ subsets: ["latin"], weight: "400", variable: "--font-archivo" });
 
 export const metadata: Metadata = {
   title: { default: "Ravenshaw AI", template: "%s · Ravenshaw AI" },
@@ -32,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: supabaseEnvScript() }} />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${inter.variable} font-sans`}>
+      <body className={`${inter.variable} ${archivo.variable} font-sans`}>
         {children}
         <Toaster position="bottom-right" toastOptions={{ className: "!text-[13px]" }} />
       </body>

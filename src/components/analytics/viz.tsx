@@ -13,10 +13,10 @@ import { cn, money, num, pct } from "@/lib/utils";
  * the six checks; light slots 3–5 sit under 3:1 so every chart ships with a legend/labels and a table/CSV view).
  */
 const VIZ_CSS = `
-.viz{--series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--series-4:#eda100;--series-5:#e87ba4;--series-6:#008300;--series-7:#6250d6;--series-8:#e34948;
+.viz{--series-1:#7c3aed;--series-2:#eb6834;--series-3:#1baf7a;--series-4:#eda100;--series-5:#e87ba4;--series-6:#008300;--series-7:#2a78d6;--series-8:#e34948;
 --seq-100:#cde2fb;--seq-200:#9ec5f4;--seq-250:#86b6ef;--seq-300:#6da7ec;--seq-400:#3987e5;--seq-450:#2a78d6;--seq-500:#256abf;--seq-600:#184f95;--seq-700:#0d366b;
 --good:#0ca30c;--critical:#d03b3b;--grid:#ececea;--axis:#d6d6d6;--muted:#898781}
-.dark .viz{--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500;--series-5:#d55181;--series-6:#008300;--series-7:#9085e9;--series-8:#e66767;
+.dark .viz{--series-1:#8457f0;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500;--series-5:#d55181;--series-6:#008300;--series-7:#3987e5;--series-8:#e66767;
 --grid:#262626;--axis:#383835;--muted:#898781}
 `;
 

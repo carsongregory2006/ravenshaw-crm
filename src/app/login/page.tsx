@@ -46,11 +46,14 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg-2 px-4">
-      <div className="w-full max-w-[340px]">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg-2 px-4">
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-[-220px] size-[520px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
+      <div className="relative w-full max-w-[340px]">
         <div className="mb-6 flex flex-col items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-lg bg-fg text-lg font-bold text-bg">R</span>
-          <h1 className="text-lg font-semibold">{mode === "signup" ? "Create your account" : "Welcome to Ravenshaw AI"}</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon.svg" alt="Ravenshaw AI" className="size-12 rounded-xl shadow-lg" />
+          <h1 className="text-center font-display text-[22px] leading-tight tracking-tight">{mode === "signup" ? "Create your account" : "Ravenshaw AI"}</h1>
+          {mode !== "signup" && <p className="-mt-2 text-[13px] text-fg-3">Sign in to your CRM</p>}
           {params.get("deactivated") && <p className="text-center text-xs text-danger">Your account isn&apos;t active. A workspace admin needs to approve it in Settings → Team.</p>}
         </div>
         {sent ? (

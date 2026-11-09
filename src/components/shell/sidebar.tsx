@@ -18,10 +18,10 @@ function NavLink({ item, active, badge }: { item: NavItem; active: boolean; badg
       href={item.href}
       className={cn(
         "flex h-7 items-center gap-2 rounded-md px-2 text-[13px] transition-colors",
-        active ? "bg-active text-fg font-medium" : "text-fg-2 hover:bg-hover hover:text-fg",
+        active ? "bg-accent-soft text-fg font-medium" : "text-fg-2 hover:bg-hover hover:text-fg",
       )}
     >
-      <item.icon className={cn("size-4", active ? "text-fg" : "text-fg-3")} />
+      <item.icon className={cn("size-4", active ? "text-accent" : "text-fg-3")} />
       <span className="truncate">{item.label}</span>
       {!!badge && <span className="ml-auto rounded-sm bg-accent px-1 text-[10px] font-semibold text-white">{badge}</span>}
     </Link>
@@ -50,8 +50,9 @@ export function Sidebar({ profile, workspaceName, unread, onSearch, onNotificati
         <Menu>
           <MenuTrigger asChild>
             <button className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 hover:bg-hover cursor-pointer">
-              <span className="flex size-5 items-center justify-center rounded-sm bg-fg text-[11px] font-bold text-bg">R</span>
-              <span className="truncate text-[13px] font-semibold">{workspaceName}</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/icon.svg" alt="" className="size-6 shrink-0 rounded-md" />
+              <span className="truncate font-display text-[14px] tracking-tight">{workspaceName}</span>
               <ChevronDown className="size-3.5 text-fg-3" />
             </button>
           </MenuTrigger>
