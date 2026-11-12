@@ -33,6 +33,7 @@ export async function saveNetworkLeadAction(id: string | null, input: NetworkInp
 
 export async function deleteNetworkLeadAction(id: string) {
   return safe(async () => {
+    if (!(await getProfile())) throw new Error("Not signed in");
     const supabase = await createClient();
     const { error } = await supabase.from("network_leads").delete().eq("id", id);
     if (error) throw new Error(error.message);

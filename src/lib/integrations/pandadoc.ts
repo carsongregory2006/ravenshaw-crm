@@ -96,7 +96,7 @@ export const documentAppUrl = (id: string) => `https://app.pandadoc.com/a/#/docu
 /** PandaDoc signs with HMAC-SHA256(body, shared key) passed as ?signature= */
 export function verifyPandaDocWebhook(rawBody: string, signature: string | null): boolean {
   const key = process.env.PANDADOC_WEBHOOK_KEY;
-  if (!key) return true;
+  if (!key) return false;
   if (!signature) return false;
   const expected = crypto.createHmac("sha256", key).update(rawBody).digest("hex");
   return expected.length === signature.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));

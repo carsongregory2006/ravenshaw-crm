@@ -55,7 +55,8 @@ export async function updateWorkspace(patch: WsPatch) {
 
 export async function testAi(model: string) {
   return safe(async () => {
-    await me();
+    const profile = await me();
+    if (profile.role !== "admin") throw new Error("Only admins can test the AI connection");
     const started = Date.now();
     const text = await chat([{ role: "user", content: "Reply with exactly: Ravenshaw AI is connected." }], { model: model || undefined, maxTokens: 30 });
     return { text, ms: Date.now() - started };

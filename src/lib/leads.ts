@@ -97,7 +97,7 @@ export async function createLead(input: CreateLeadInput): Promise<CreateLeadResu
       phone: existing.phone || phone,
       company_id: existing.company_id || companyId,
       owner_id: existing.owner_id || ownerId,
-      custom_fields: { ...(existing.custom_fields ?? {}), ...extra },
+      custom_fields: { ...extra, ...(existing.custom_fields ?? {}) },
     };
     // re-engaged contacts that had gone cold become leads again
     if (existing.status === "unqualified" || existing.status === "churned") patch.status = "lead";

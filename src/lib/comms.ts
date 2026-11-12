@@ -39,6 +39,8 @@ export async function sendSmsToContact(contactId: string, text: string, opts: { 
   const { db, contact, settings } = await loadContext(contactId);
   const to = toE164(contact.phone);
   if (!to) return { ok: false, error: "Contact has no phone number" };
+  // Canada/US only, and never 900 numbers: blocks SMS-pumping fraud through public forms.
+  if (!/^\+1[2-9]\d{9}$/.test(to) || to.startsWith("+1900")) return { ok: false, error: "Texts can only go to Canadian and US numbers" };
   if (contact.do_not_contact || contact.sms_opt_out) return { ok: false, error: "Contact opted out of SMS" };
   const body = renderTemplate(text, mergeVars(contact, settings, opts.vars));
   // Explicit pick, else the number this contact last used, else the default line.

@@ -140,7 +140,7 @@ export async function setNumberConnection(numberId: string, connectionId: string
 /** Verify Telnyx webhook (ed25519). Public key from Telnyx portal → Keys & Credentials → Public Key. */
 export function verifyTelnyxWebhook(rawBody: string, headers: Headers): boolean {
   const pub = process.env.TELNYX_PUBLIC_KEY;
-  if (!pub) return true;
+  if (!pub) return false;
   const sig = headers.get("telnyx-signature-ed25519");
   const ts = headers.get("telnyx-timestamp");
   if (!sig || !ts) return false;

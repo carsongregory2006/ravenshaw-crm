@@ -139,11 +139,19 @@ export async function markConversationReadAction(contactId: string) {
 
 // ───────────── Calls ─────────────
 
+/** The contact id, but only if the signed-in user is allowed to see that contact. */
+async function visibleContactId(id: string | null | undefined) {
+  if (!id) return null;
+  const sb = await createClient();
+  const { data } = await sb.from("contacts").select("id").eq("id", id).maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
 export async function lookupContactByPhoneAction(phone: string) {
   return safe(async () => {
     await userId();
     const c = await findContact({ phone });
-    return c ? { id: c.id, name: contactLabel(c) } : null;
+    return c && (await visibleContactId(c.id)) ? { id: c.id, name: contactLabel(c) } : null;
   });
 }
 
@@ -168,8 +176,8 @@ export async function logCallStartAction(input: { contactId?: string | null; pho
     const uid = await userId();
     const admin = createAdminClient();
     const number = toE164(input.phone) ?? input.phone;
-    let contactId = input.contactId ?? null;
-    if (!contactId) contactId = (await findContact({ phone: number }))?.id ?? null;
+    let contactId = await visibleContactId(input.contactId);
+    if (!contactId) contactId = await visibleContactId((await findContact({ phone: number }))?.id);
 
     // A webhook may already have created this call (inbound): claim it instead of duplicating.
     if (input.telnyxCallId) {

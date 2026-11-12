@@ -6,7 +6,9 @@ const API = "https://api.calendly.com";
 
 async function calendly<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const token = need("CALENDLY_API_TOKEN", "Calendly");
-  const res = await fetch(path.startsWith("http") ? path : `${API}${path}`, {
+  const url = path.startsWith("http") ? path : `${API}${path}`;
+  if (!url.startsWith(`${API}/`)) throw new Error("Refusing to send the Calendly token outside api.calendly.com");
+  const res = await fetch(url, {
     ...init,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers || {}) },
   });
@@ -73,11 +75,12 @@ export async function listWebhookSubscriptions() {
 /** Calendly-Webhook-Signature: t=<ts>,v1=<hmac_sha256(t.body)> */
 export function verifyCalendlyWebhook(rawBody: string, headers: Headers): boolean {
   const key = process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
-  if (!key) return true;
+  if (!key) return false;
   const header = headers.get("calendly-webhook-signature");
   if (!header) return false;
   const parts = Object.fromEntries(header.split(",").map((p) => p.split("=") as [string, string]));
   if (!parts.t || !parts.v1) return false;
+  if (Math.abs(Date.now() / 1000 - Number(parts.t)) > 300) return false;
   const expected = crypto.createHmac("sha256", key).update(`${parts.t}.${rawBody}`).digest("hex");
   return expected.length === parts.v1.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1));
 }

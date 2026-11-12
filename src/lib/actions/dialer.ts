@@ -224,7 +224,7 @@ export async function startSessionAction(input: {
     // Drop anyone who became undialable since the list was built.
     const dialable = new Set<string>();
     for (const part of chunk(ids, 300)) {
-      const { data } = await admin.from("contacts").select("id, phone, do_not_contact, phone_bad").in("id", part);
+      const { data } = await sb.from("contacts").select("id, phone, do_not_contact, phone_bad").in("id", part);
       for (const c of data ?? []) if (!undialable(c)) dialable.add(c.id);
     }
     ids = ids.filter((id) => dialable.has(id));

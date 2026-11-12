@@ -49,7 +49,7 @@ export async function getReceivedEmail(id: string) {
 /** Verify a Resend (Svix) webhook signature. */
 export function verifyResendWebhook(rawBody: string, headers: Headers): boolean {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (!secret) return true; // not configured: accept (documented in Settings)
+  if (!secret) return false; // not configured: reject
   const id = headers.get("svix-id");
   const ts = headers.get("svix-timestamp");
   const sigHeader = headers.get("svix-signature");

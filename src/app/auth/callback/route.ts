@@ -8,5 +8,7 @@ export async function GET(req: NextRequest) {
     const supabase = await createClient();
     await supabase.auth.exchangeCodeForSession(code);
   }
-  return NextResponse.redirect(new URL(next.startsWith("/") ? next : "/dashboard", req.url));
+  // Only same-site paths: "//evil.com" and "/\\evil.com" would leave the site.
+  const safe = /^\/(?![\/\\])/.test(next) ? next : "/dashboard";
+  return NextResponse.redirect(new URL(safe, req.url));
 }

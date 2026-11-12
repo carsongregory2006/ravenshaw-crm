@@ -85,9 +85,10 @@ export async function POST(req: Request) {
       referrer: b.referrer ?? req.headers.get("referer"),
       extra,
     });
-    return NextResponse.json({ ok: true, contact_id: r.contactId }, { headers: CORS_HEADERS });
+    // Only hand back the id of a contact this submission created, never an existing one.
+    return NextResponse.json({ ok: true, contact_id: r.isNew ? r.contactId : null }, { headers: CORS_HEADERS });
   } catch (e) {
     console.error("lead capture failed", e);
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Could not submit" }, { status: 500, headers: CORS_HEADERS });
+    return NextResponse.json({ ok: false, error: "Could not submit. Please try again." }, { status: 500, headers: CORS_HEADERS });
   }
 }
