@@ -25,7 +25,11 @@ export async function saveInboundAppId(id: string) {
 
 const appUrl = () => process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
 const ringbackUrl = () => `${appUrl()}/api/public/ringback`;
-const quiet = (p: Promise<unknown>) => p.catch((e) => console.error("telnyx inbound", e instanceof Error ? e.message : e));
+// 90018 "Call has already ended" just means the caller hung up first; anything else is a real failure.
+const quiet = (p: Promise<unknown>) => p.catch((e) => {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (!msg.includes("90018")) console.error("telnyx inbound", msg);
+});
 
 /** Returns true when the event belongs to inbound routing and the generic logger should skip it. */
 export async function handleInboundRouting(type: string, p: any): Promise<boolean> {
