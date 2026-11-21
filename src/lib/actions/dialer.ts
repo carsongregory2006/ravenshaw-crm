@@ -32,7 +32,11 @@ const undialable = (c: Pick<Contact, "do_not_contact" | "phone_bad" | "phone">) 
 
 // ───────────── Lead lists ─────────────
 
-export interface LeadImportRow { full_name?: string; first_name?: string; last_name?: string; phone?: string; email?: string; company?: string; notes?: string }
+export interface LeadImportRow { full_name?: string; first_name?: string; last_name?: string; phone?: string; email?: string; company?: string; title?: string; notes?: string; custom?: Record<string, string> }
+
+/** Drop blank values from CSV custom columns. */
+const cleanCustom = (c?: Record<string, string>) =>
+  Object.fromEntries(Object.entries(c ?? {}).slice(0, 50).map(([k, v]) => [k, String(v).trim().slice(0, 2000)]).filter(([k, v]) => v && /^[a-z0-9_]{1,60}$/.test(k)));
 
 /**
  * Import a CSV as a named lead list. Matches existing contacts by phone (no duplicates), creates the rest,
@@ -58,9 +62,9 @@ export async function importLeadListAction(input: { name: string; rows: LeadImpo
     }
 
     // Existing contacts by phone.
-    const existing = new Map<string, Pick<Contact, "id" | "do_not_contact" | "phone_bad" | "phone">>();
+    const existing = new Map<string, Pick<Contact, "id" | "do_not_contact" | "phone_bad" | "phone" | "title" | "custom_fields">>();
     for (const part of chunk(rows.map((x) => x.e164), 200)) {
-      const { data } = await admin.from("contacts").select("id, phone, do_not_contact, phone_bad").in("phone", part);
+      const { data } = await admin.from("contacts").select("id, phone, do_not_contact, phone_bad, title, custom_fields").in("phone", part);
       for (const c of data ?? []) if (c.phone) existing.set(c.phone, c);
     }
 
@@ -82,6 +86,7 @@ export async function importLeadListAction(input: { name: string; rows: LeadImpo
 
     const items: { contact_id: string; notes: string | null }[] = [];
     const toCreate: (LeadImportRow & { e164: string })[] = [];
+    const updates: { id: string; patch: Record<string, unknown> }[] = [];
     for (const row of rows) {
       const ex = existing.get(row.e164);
       if (ex) {
@@ -89,6 +94,13 @@ export async function importLeadListAction(input: { name: string; rows: LeadImpo
         if (ex.phone_bad) { r.skippedBad++; continue; }
         r.matched++;
         items.push({ contact_id: ex.id, notes: row.notes?.trim() || null });
+        // Fill in new info from the CSV without overwriting what's already on the contact.
+        const current = (ex.custom_fields ?? {}) as Record<string, unknown>;
+        const extra = Object.fromEntries(Object.entries(cleanCustom(row.custom)).filter(([k]) => (current[k] == null || current[k] === "")));
+        const title = !ex.title && row.title?.trim() ? row.title.trim() : null;
+        if (Object.keys(extra).length || title) {
+          updates.push({ id: ex.id, patch: { ...(Object.keys(extra).length ? { custom_fields: { ...current, ...extra } } : {}), ...(title ? { title } : {}) } });
+        }
       } else toCreate.push(row);
     }
     for (const part of chunk(toCreate, 500)) {
@@ -102,6 +114,7 @@ export async function importLeadListAction(input: { name: string; rows: LeadImpo
         }
         return {
           first_name: first, last_name: last, phone: row.e164, email: row.email?.trim().toLowerCase() || null,
+          title: row.title?.trim() || null, custom_fields: cleanCustom(row.custom),
           company_id: row.company ? companyIds.get(row.company.trim().toLowerCase()) ?? null : null,
           status: "lead", source: "csv_import", owner_id: profile.id, tags: ["cold-call"],
         };
@@ -112,6 +125,10 @@ export async function importLeadListAction(input: { name: string; rows: LeadImpo
         const id = byPhone.get(row.e164);
         if (id) { r.created++; items.push({ contact_id: id, notes: row.notes?.trim() || null }); }
       }
+    }
+
+    for (const part of chunk(updates, 25)) {
+      await Promise.all(part.map((u) => admin.from("contacts").update(u.patch).eq("id", u.id)));
     }
 
     for (const [i, part] of chunk(items, 500).entries()) {

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FileUp } from "lucide-react";
+import { FileUp, Sparkles } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input, Select } from "@/components/ui/input";
@@ -11,47 +11,56 @@ import { parseCsv, downloadCsv } from "@/components/records/csv";
 import { createClient } from "@/lib/supabase/client";
 import { createListFromContactsAction, importLeadListAction, type LeadImportRow } from "@/lib/actions/dialer";
 import { contactLabel, fmtPhone } from "@/lib/utils";
+import { autoMap, BUILTIN_FIELDS, customKey, prettyKey, type BuiltinField, type ColumnMap } from "@/lib/csv-mapping";
 
-const FIELDS: { value: keyof LeadImportRow | ""; label: string; guess: RegExp }[] = [
-  { value: "", label: "— Skip —", guess: /^$/ },
-  { value: "full_name", label: "Name", guess: /^(name|full.?name|contact|owner)$/i },
-  { value: "first_name", label: "First name", guess: /^(first|first.?name|given)/i },
-  { value: "last_name", label: "Last name", guess: /^(last|last.?name|surname|family)/i },
-  { value: "phone", label: "Phone", guess: /(phone|mobile|cell|tel|number)/i },
-  { value: "email", label: "Email", guess: /e-?mail/i },
-  { value: "company", label: "Company", guess: /(company|business|organi[sz]ation|account)/i },
-  { value: "notes", label: "Notes", guess: /(note|comment|description)/i },
-];
+const encode = (m: ColumnMap) => (m.kind === "skip" ? "" : m.kind === "field" ? `f:${m.field}` : `c:${m.key}`);
+const decode = (v: string): ColumnMap => (v.startsWith("f:") ? { kind: "field", field: v.slice(2) as BuiltinField } : v.startsWith("c:") ? { kind: "custom", key: v.slice(2) } : { kind: "skip" });
 
 export function LeadImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: (listId: string) => void }) {
   const [name, setName] = useState("");
   const [data, setData] = useState<string[][]>([]);
-  const [mapping, setMapping] = useState<(keyof LeadImportRow | "")[]>([]);
+  const [mapping, setMapping] = useState<ColumnMap[]>([]);
+  const [knownKeys, setKnownKeys] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { if (!open) { setData([]); setMapping([]); setName(""); } }, [open]);
+
+  // Custom fields already used on contacts, so repeat columns land in the same field.
+  useEffect(() => {
+    if (!open) return;
+    createClient().from("contacts").select("custom_fields").neq("custom_fields", "{}").order("updated_at", { ascending: false }).limit(1000)
+      .then(({ data }) => {
+        const keys = new Set<string>();
+        for (const c of data ?? []) for (const k of Object.keys((c.custom_fields as Record<string, unknown>) ?? {})) keys.add(k);
+        setKnownKeys([...keys].sort());
+      });
+  }, [open]);
 
   const onFile = async (f: File) => {
     const rows = parseCsv(await f.text()).filter((r) => r.some((c) => c.trim()));
     if (rows.length < 2) return toast.error("CSV needs a header row and at least one data row");
     setData(rows);
     if (!name) setName(f.name.replace(/\.csv$/i, ""));
-    const used = new Set<string>();
-    setMapping(rows[0].map((h) => {
-      const m = FIELDS.find((x) => x.value && !used.has(x.value) && x.guess.test(h.trim()));
-      if (m?.value) used.add(m.value);
-      return m?.value ?? "";
-    }));
+    setMapping(autoMap(rows[0], rows.slice(1, 51), knownKeys));
   };
 
   const header = data[0] ?? [];
   const body = data.slice(1);
+  const known = new Set(knownKeys);
+  const mappedCount = mapping.filter((m) => m.kind !== "skip").length;
+  const newFields = [...new Set(mapping.flatMap((m) => (m.kind === "custom" && !known.has(m.key) ? [m.key] : [])))];
+  const customOptions = [...new Set([...knownKeys, ...mapping.flatMap((m) => (m.kind === "custom" ? [m.key] : []))])].sort();
 
   const submit = async () => {
-    if (!mapping.includes("phone")) return toast.error("Map a column to Phone");
+    if (!mapping.some((m) => m.kind === "field" && m.field === "phone")) return toast.error("Map a column to Phone");
     const rows: LeadImportRow[] = body.map((r) => {
       const o: LeadImportRow = {};
-      mapping.forEach((field, i) => { if (field && r[i]?.trim()) o[field] = r[i].trim(); });
+      mapping.forEach((m, i) => {
+        const v = r[i]?.trim();
+        if (!v || m.kind === "skip") return;
+        if (m.kind === "field") o[m.field] = v;
+        else (o.custom ??= {})[m.key] = v;
+      });
       return o;
     });
     setBusy(true);
@@ -70,9 +79,9 @@ export function LeadImportDialog({ open, onOpenChange, onDone }: { open: boolean
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="lg" title="Import a lead list"
-      description="Leads are matched to existing people by phone (no duplicates). Do Not Contact and bad numbers are skipped."
+      description="Columns map automatically; anything new becomes a custom field. Leads are matched to existing people by phone (no duplicates). Do Not Contact and bad numbers are skipped."
       footer={<>
-        <Button variant="ghost" className="mr-auto" onClick={() => downloadCsv("lead-list-template.csv", [["Name", "Phone", "Email", "Company", "Notes"], ["Jane Doe", "+16135550100", "jane@greenlawns.ca", "Green Lawns Ottawa", "Owner, 3 trucks"]])}>Download template</Button>
+        <Button variant="ghost" className="mr-auto" onClick={() => downloadCsv("lead-list-template.csv", [["Name", "Phone", "Email", "Company", "Job title", "City", "Website", "Notes"], ["Jane Doe", "+16135550100", "jane@greenlawns.ca", "Green Lawns Ottawa", "Owner", "Ottawa", "greenlawns.ca", "3 trucks"]])}>Download template</Button>
         <Button onClick={() => onOpenChange(false)}>Cancel</Button>
         <Button variant="primary" onClick={submit} loading={busy} disabled={!body.length || !name.trim()}>Import {body.length || ""} rows</Button>
       </>}>
@@ -84,16 +93,32 @@ export function LeadImportDialog({ open, onOpenChange, onDone }: { open: boolean
         </label>
         {header.length > 0 && (
           <div>
-            <div className="mb-1 text-xs text-fg-3">Map columns</div>
+            <div className="mb-1 flex items-center gap-1.5 text-xs text-fg-3">
+              <Sparkles className="size-3.5 text-accent" />
+              Auto-mapped {mappedCount} of {header.length} columns
+              {newFields.length > 0 && <> · {newFields.length} new field{newFields.length === 1 ? "" : "s"} will be created ({newFields.map(prettyKey).join(", ")})</>}
+              {!mapping.some((m) => m.kind === "field" && m.field === "phone") && <span className="text-danger"> · no Phone column found, pick one below</span>}
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              {header.map((h, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="w-1/2 truncate text-[13px]" title={h}>{h || `Column ${i + 1}`}<span className="ml-1 text-xs text-fg-4">{body[0]?.[i] ? `e.g. ${body[0][i].slice(0, 20)}` : ""}</span></span>
-                  <Select value={mapping[i] ?? ""} onChange={(e) => setMapping((m) => m.map((x, j) => (j === i ? (e.target.value as keyof LeadImportRow | "") : x)))} className="h-7 flex-1 text-xs">
-                    {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                  </Select>
-                </div>
-              ))}
+              {header.map((h, i) => {
+                const m = mapping[i] ?? { kind: "skip" };
+                const ownKey = customKey(h || `column ${i + 1}`);
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-1/2 truncate text-[13px]" title={h}>{h || `Column ${i + 1}`}<span className="ml-1 text-xs text-fg-4">{body[0]?.[i] ? `e.g. ${body[0][i].slice(0, 20)}` : ""}</span></span>
+                    <Select value={encode(m)} onChange={(e) => setMapping((all) => all.map((x, j) => (j === i ? decode(e.target.value) : x)))} className="h-7 flex-1 text-xs">
+                      <option value="">— Skip —</option>
+                      <optgroup label="Contact fields">
+                        {BUILTIN_FIELDS.map((f) => <option key={f.field} value={`f:${f.field}`}>{f.label}</option>)}
+                      </optgroup>
+                      <optgroup label="Custom fields">
+                        {!customOptions.includes(ownKey) && <option value={`c:${ownKey}`}>+ New field: {prettyKey(ownKey)}</option>}
+                        {customOptions.map((k) => <option key={k} value={`c:${k}`}>{known.has(k) ? prettyKey(k) : `+ New field: ${prettyKey(k)}`}</option>)}
+                      </optgroup>
+                    </Select>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
