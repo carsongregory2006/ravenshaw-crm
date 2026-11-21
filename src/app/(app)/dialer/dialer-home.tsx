@@ -116,16 +116,17 @@ export function DialerHome() {
       </PageHeader>
       <PageBody className="p-4">
         {tab === "settings" ? <DialerSettingsPanel voicemails={voicemails} /> : (
+        <div className="space-y-4">
+        <ListPicker lists={lists} loading={loading} selectedId={listId} onSelect={setListId} onImport={() => setImportOpen(true)} />
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
           <div className="space-y-4">
             <Card title="Start a dialing session">
               <div className="space-y-3">
-                <Field label="Lead list">
-                  <Select value={listId} onChange={(e) => setListId(e.target.value)}>
-                    {!lists.length && <option value="">No lists yet</option>}
-                    {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.pending} to call)</option>)}
-                  </Select>
-                </Field>
+                <div className="rounded-md border border-border-light bg-bg-2 px-2.5 py-2 text-[13px]">
+                  <div className="text-xs text-fg-3">Lead list</div>
+                  {selected ? <div className="truncate font-medium">{selected.name} <span className="font-normal text-fg-3">· {selected.pending} to call</span></div>
+                    : <div className="text-fg-3">Pick a list above</div>}
+                </div>
                 <Field label="Call from" hint={from === "local" ? "Uses your number closest to each lead's area code (falls back to your default)." : undefined}>
                   <Select value={from} onChange={(e) => setFrom(e.target.value)}>
                     <option value="local">Local presence (auto-match area code)</option>
@@ -192,6 +193,7 @@ export function DialerHome() {
               )}
           </Card>
         </div>
+        </div>
         )}
       </PageBody>
 
@@ -200,6 +202,63 @@ export function DialerHome() {
       {viewList && <ListDialog list={viewList} onClose={() => setViewList(null)} starting={starting}
         onStart={(ids) => start({ listId: viewList.id, contactIds: ids })} />}
     </Page>
+  );
+}
+
+const SOURCE: Record<string, { label: string; color: "blue" | "gray" | "orange" | "purple" }> = {
+  csv: { label: "CSV", color: "blue" }, quick: { label: "Quick", color: "gray" }, recycled: { label: "Recycled", color: "orange" }, contacts: { label: "Contacts", color: "purple" },
+};
+
+/** Card picker for which lead list to dial. */
+function ListPicker({ lists, loading, selectedId, onSelect, onImport }: { lists: ListRow[]; loading: boolean; selectedId: string; onSelect: (id: string) => void; onImport: () => void }) {
+  const [q, setQ] = useState("");
+  const [all, setAll] = useState(false);
+  const shown = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    const f = n ? lists.filter((l) => l.name.toLowerCase().includes(n)) : lists;
+    return all || n ? f : f.slice(0, 8);
+  }, [lists, q, all]);
+  if (loading) return <Card><div className="flex justify-center py-6"><Spinner /></div></Card>;
+  if (!lists.length) return null;
+  return (
+    <Card title="Choose a lead list" actions={lists.length > 8 ? <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search lists" className="h-7 w-48 text-xs" /> : undefined}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {shown.map((l) => {
+          const active = l.id === selectedId;
+          const done = l.total ? Math.round(((l.called + l.skipped) / l.total) * 100) : 0;
+          const src = SOURCE[l.source] ?? SOURCE.contacts;
+          return (
+            <button key={l.id} onClick={() => onSelect(l.id)}
+              className={cn("group rounded-lg border p-3 text-left transition-colors cursor-pointer",
+                active ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-border hover:border-fg-4 hover:bg-hover")}>
+              <div className="flex items-start gap-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={l.name}>{l.name}</span>
+                <Tag color={src.color}>{src.label}</Tag>
+              </div>
+              <div className="mt-2 flex items-baseline gap-1">
+                <span className={cn("text-2xl font-semibold tabular-nums", l.pending ? "text-fg" : "text-fg-4")}>{l.pending}</span>
+                <span className="text-xs text-fg-3">to call</span>
+                <span className="ml-auto text-xs text-fg-3 tabular-nums">{l.total} leads</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-2">
+                <div className="h-full rounded-full bg-accent" style={{ width: `${done}%` }} />
+              </div>
+              <div className="mt-1.5 flex items-center text-[11px] text-fg-4">
+                <span>{done}% done{l.waiting ? ` · ${l.waiting} waiting` : ""}</span>
+                <span className="ml-auto"><Time value={l.created_at} format="date" /></span>
+              </div>
+            </button>
+          );
+        })}
+        {!q && !all && lists.length > 8 && (
+          <button onClick={() => setAll(true)} className="rounded-lg border border-dashed border-border p-3 text-[13px] text-fg-3 hover:bg-hover cursor-pointer">Show all {lists.length} lists</button>
+        )}
+        {!q && (all || lists.length <= 8) && (
+          <button onClick={onImport} className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border p-3 text-[13px] text-fg-3 hover:bg-hover cursor-pointer"><FileUp className="size-4" /> Import a new list</button>
+        )}
+        {q && !shown.length && <p className="text-xs text-fg-3">No lists match “{q}”.</p>}
+      </div>
+    </Card>
   );
 }
 
