@@ -29,6 +29,7 @@ import { cn, fmtPhone, lineLabel, localLine } from "@/lib/utils";
 import type { DialSession, Template } from "@/lib/types";
 import { callingWindow, DEFAULT_DIALER_SETTINGS, type DialerSettings } from "@/lib/dialer/settings";
 import { EditLeadDialog } from "./edit-lead";
+import { prettyKey } from "@/lib/csv-mapping";
 import { BookMeetingDialog } from "./book-meeting";
 
 type Stage = "ready" | "dialing" | "wrapup" | "callback" | "countdown" | "done" | "ended";
@@ -419,6 +420,7 @@ export function SessionRunner({ id }: { id: string }) {
                       return <div className={cn("mt-1 text-xs", w.allowed ? "text-fg-3" : "text-warning")}>Their time: {w.localTime} ({w.city}){!w.allowed && ` — outside calling hours ${w.window}`}</div>;
                     })()}
                     {lead.notes && <p className="mt-2 whitespace-pre-wrap rounded-md bg-bg-2 px-2 py-1.5 text-[13px] text-fg-2">{lead.notes}</p>}
+                    <LeadDetails details={lead.details} />
                   </div>
                   <CallStatus stage={stage} paused={paused} countdown={countdown} />
                 </div>
@@ -551,4 +553,36 @@ function CallStatus({ stage, paused, countdown }: { stage: Stage; paused: boolea
   if (stage === "countdown") return paused ? <Tag color="gray">Paused</Tag> : <Tag color="blue">Next in {countdown}s</Tag>;
   if (paused) return <Tag color="gray">Paused</Tag>;
   return null;
+}
+
+/** Link target for a value that looks like a URL or bare domain, else null. */
+function asUrl(v: string): string | null {
+  if (/^https?:\/\/\S+$/i.test(v)) return v;
+  if (/^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/\S*)?$/i.test(v)) return `https://${v}`;
+  return null;
+}
+
+/** Everything else from the lead list CSV, so you know who you're calling. */
+function LeadDetails({ details }: { details: Record<string, string> }) {
+  const entries = Object.entries(details ?? {});
+  if (!entries.length) return null;
+  return (
+    <div className="mt-2 rounded-md border border-border-light px-2.5 py-2">
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-fg-4">Lead info</div>
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-2">
+        {entries.map(([k, v]) => {
+          const url = asUrl(v);
+          const long = v.length > 80;
+          return (
+            <div key={k} className={cn("flex min-w-0 gap-2", long && "sm:col-span-2")}>
+              <dt className="shrink-0 text-fg-3">{prettyKey(k)}</dt>
+              <dd className={cn("min-w-0 text-fg", long ? "whitespace-pre-wrap" : "truncate")} title={v}>
+                {url ? <a href={url} target="_blank" rel="noreferrer" className="text-accent hover:underline">{v.replace(/^https?:\/\//, "").slice(0, 60)}</a> : v}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
 }

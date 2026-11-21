@@ -281,6 +281,8 @@ export interface SessionLead {
   lastCalledAt: string | null;
   folderId: string | null;
   health: Health;
+  /** Extra info from the lead list CSV (contact custom fields). */
+  details: Record<string, string>;
 }
 
 /** Number health for a set of contacts, from their call history. */
@@ -304,7 +306,7 @@ export async function loadSessionAction(id: string) {
     const admin = createAdminClient();
     const leads = new Map<string, SessionLead>();
     for (const part of chunk(s.queue, 300)) {
-      const { data } = await admin.from("contacts").select("id, first_name, last_name, email, phone, title, status, do_not_contact, phone_bad, sms_opt_out, folder_id, company:companies(name)").in("id", part);
+      const { data } = await admin.from("contacts").select("id, first_name, last_name, email, phone, title, status, do_not_contact, phone_bad, sms_opt_out, folder_id, custom_fields, company:companies(name)").in("id", part);
       const rows = (data ?? []) as unknown as (Contact & { company: { name: string } | null })[];
       const health = await healthFor(rows);
       for (const c of rows) {
@@ -312,6 +314,7 @@ export async function loadSessionAction(id: string) {
           id: c.id, name: contactLabel(c) || "Unnamed", phone: c.phone, email: c.email, company: c.company?.name ?? null, title: c.title, status: c.status,
           notes: null, doNotContact: c.do_not_contact, phoneBad: c.phone_bad, smsOptOut: c.sms_opt_out, lastOutcome: null, lastCalledAt: null,
           folderId: c.folder_id, health: health.get(c.id)!,
+          details: Object.fromEntries(Object.entries(c.custom_fields ?? {}).map(([k, v]) => [k, v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v).trim()]).filter(([, v]) => v)),
         });
       }
     }
