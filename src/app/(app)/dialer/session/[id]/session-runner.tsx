@@ -131,31 +131,38 @@ export function SessionRunner({ id }: { id: string }) {
   }, [stage, session?.ended_at]);
 
   // ── Dialing ──
+  const ended = useRef(false);
+  useEffect(() => { ended.current = stage === "ended"; }, [stage]);
   const dial = useCallback(async (index: number) => {
-    const l = leads[index];
-    if (!session || !l) return;
-    if (l.doNotContact || l.phoneBad || !l.phone) {
-      toast(`Skipped ${l.name}: ${l.doNotContact ? "Do Not Contact" : l.phoneBad ? "bad number" : "no phone"}`);
-      const next = index + 1;
-      setPos(next);
-      await setSessionPositionAction(id, next, l.id);
-      if (next >= leads.length) setStage("done"); else dial(next);
-      return;
+    if (!session || ended.current) return;
+    // Walk past leads that can't be called right now in one pass (no per-lead pop-ups or saves).
+    let i = index;
+    const skipped: string[] = [];
+    let heldNow = 0;
+    let firstHold: ReturnType<typeof callingWindow> | null = null;
+    for (; i < leads.length; i++) {
+      const l = leads[i];
+      if (l.doNotContact || l.phoneBad || !l.phone) { skipped.push(l.id); continue; }
+      // Calling hours (lead's local time): hold them — they stay "to call" in the list for a later session.
+      const w = callingWindow(l.phone, settings.callingHours);
+      if (!w.allowed) { heldNow++; firstHold ??= w; continue; }
+      break;
     }
-    // Calling hours (lead's local time): hold them — they stay "to call" in the list for a later session.
-    const w = callingWindow(l.phone, settings.callingHours);
-    if (!w.allowed) {
-      toast(`Held ${l.name}: it's ${w.localTime} in ${w.city} (calling hours ${w.window})`);
-      setHeld((h) => h + 1);
-      const next = index + 1;
-      setPos(next);
-      await setSessionPositionAction(id, next, null);
-      if (next >= leads.length) setStage("done"); else dial(next);
-      return;
+    if (i !== index) {
+      setPos(i);
+      setHeld((h) => h + heldNow);
+      for (const sid of skipped) await setSessionPositionAction(id, i, sid);
+      if (!skipped.length) await setSessionPositionAction(id, i, null);
+      const bits = [skipped.length && `skipped ${skipped.length} (Do Not Contact / bad number / no phone)`,
+        heldNow && `held ${heldNow} outside calling hours${firstHold ? ` (it's ${firstHold.localTime} in ${firstHold.city}, hours ${firstHold.window})` : ""}`].filter(Boolean).join(" · ");
+      toast(bits.charAt(0).toUpperCase() + bits.slice(1), { duration: 8000 });
     }
+    if (ended.current) return;
+    if (i >= leads.length) { setStage("done"); return; }
+    const l = leads[i];
     setNotes(""); setSavedNotes(""); setLastCallId(null); setLastOutcome(null); setCallbackAt(tomorrowAt10());
     setStage("dialing");
-    const ok = await p.call({ phone: l.phone, contactId: l.id, name: l.name }, { from: fromFor(l), dialSessionId: id, stay: true });
+    const ok = await p.call({ phone: l.phone!, contactId: l.id, name: l.name }, { from: fromFor(l), dialSessionId: id, stay: true });
     if (!ok) { setStage("ready"); setPaused(true); }
   }, [session, leads, p, fromFor, id, settings.callingHours]);
 
