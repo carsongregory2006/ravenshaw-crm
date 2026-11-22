@@ -63,6 +63,7 @@ export function SessionRunner({ id }: { id: string }) {
   const [pos, setPos] = useState(0);
   const [stage, setStage] = useState<Stage>("ready");
   const [paused, setPaused] = useState(false);
+  const [waitMsg, setWaitMsg] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [notes, setNotes] = useState("");
   const [savedNotes, setSavedNotes] = useState("");
@@ -140,14 +141,25 @@ export function SessionRunner({ id }: { id: string }) {
     const skipped: string[] = [];
     let heldNow = 0;
     let firstHold: ReturnType<typeof callingWindow> | null = null;
+    let firstHeldAt = -1;
     for (; i < leads.length; i++) {
       const l = leads[i];
       if (l.doNotContact || l.phoneBad || !l.phone) { skipped.push(l.id); continue; }
       // Calling hours (lead's local time): hold them — they stay "to call" in the list for a later session.
       const w = callingWindow(l.phone, settings.callingHours);
-      if (!w.allowed) { heldNow++; firstHold ??= w; continue; }
+      if (!w.allowed) { heldNow++; firstHold ??= w; if (firstHeldAt < 0) firstHeldAt = i; continue; }
       break;
     }
+    // Nobody left who can be called right now: wait at the first held lead instead of finishing the session.
+    if (i >= leads.length && heldNow > 0) {
+      for (const sid of skipped) await setSessionPositionAction(id, firstHeldAt, sid);
+      setPos(firstHeldAt);
+      setStage("ready");
+      setPaused(true);
+      setWaitMsg(`Outside calling hours — it's ${firstHold!.localTime} in ${firstHold!.city} (hours ${firstHold!.window}). Nobody on this list can be called right now; all ${heldNow} leads are still in your list. Press Start dialing once it's calling hours.`);
+      return;
+    }
+    setWaitMsg(null);
     if (i !== index) {
       setPos(i);
       setHeld((h) => h + heldNow);
@@ -482,6 +494,7 @@ export function SessionRunner({ id }: { id: string }) {
                     </Select>
                     <Button size="sm" icon={Send} loading={sending} disabled={!templateId} onClick={sendTemplate}>Send</Button>
                   </div>
+                  {stage === "ready" && waitMsg && <p className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2 text-[13px] text-fg">{waitMsg}</p>}
                   {stage === "ready" && (
                     <Button variant="primary" icon={Phone} className="mt-3 w-full bg-success hover:bg-success hover:opacity-90" onClick={resume}>
                       {calls.length ? "Resume dialing" : "Start dialing"} <Kbd>Enter</Kbd>
