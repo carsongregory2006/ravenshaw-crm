@@ -179,6 +179,20 @@ export async function createListFromContactsAction(name: string, contactIds: str
   });
 }
 
+export async function renameListAction(listId: string, name: string) {
+  return safe(async () => {
+    await me();
+    const clean = name.trim().slice(0, 120);
+    if (!clean) throw new Error("Give the list a name");
+    const sb = await createClient();
+    const { error, count } = await sb.from("lead_lists").update({ name: clean }, { count: "exact" }).eq("id", listId);
+    if (error) throw new Error(error.message);
+    if (!count) throw new Error("List not found");
+    revalidatePath("/dialer");
+    return null;
+  });
+}
+
 export async function archiveListAction(listId: string) {
   return safe(async () => {
     await me();

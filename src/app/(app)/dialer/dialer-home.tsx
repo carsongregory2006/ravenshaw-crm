@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Archive, BarChart3, FileUp, ListPlus, Play, RotateCcw, Users, Zap } from "lucide-react";
+import { Archive, BarChart3, FileUp, ListPlus, Pencil, Play, RotateCcw, Users, Zap } from "lucide-react";
 import { Page, PageBody, PageHeader } from "@/components/ui/page";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState, Spinner } from "@/components/ui/misc";
@@ -13,7 +13,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Time } from "@/components/ui/time";
 import { createClient } from "@/lib/supabase/client";
 import { phoneLinesAction } from "@/lib/actions/comms";
-import { archiveListAction, resetListAction, startSessionAction } from "@/lib/actions/dialer";
+import { archiveListAction, renameListAction, resetListAction, startSessionAction } from "@/lib/actions/dialer";
 import { dispositionLabel } from "@/lib/dispositions";
 import { cn, contactLabel, fmtPhone, lineLabel } from "@/lib/utils";
 import type { LeadList, VoicemailDrop } from "@/lib/types";
@@ -36,6 +36,7 @@ export function DialerHome() {
   const [importOpen, setImportOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [viewList, setViewList] = useState<ListRow | null>(null);
+  const [renaming, setRenaming] = useState<ListRow | null>(null);
   const { folders, reload: reloadFolders } = useFolders();
   const lineHealth = useCallerIdHealth();
   const healthOf = (l: string) => lineHealth.find((h) => h.line === l)?.score;
@@ -117,7 +118,7 @@ export function DialerHome() {
       <PageBody className="p-4">
         {tab === "settings" ? <DialerSettingsPanel voicemails={voicemails} /> : (
         <div className="space-y-4">
-        <ListPicker lists={lists} loading={loading} selectedId={listId} onSelect={setListId} onImport={() => setImportOpen(true)} />
+        <ListPicker lists={lists} loading={loading} selectedId={listId} onSelect={setListId} onImport={() => setImportOpen(true)} onRename={setRenaming} />
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
           <div className="space-y-4">
             <Card title="Start a dialing session">
@@ -181,6 +182,7 @@ export function DialerHome() {
                         <td className="px-3 py-2 text-fg-3"><Time value={l.created_at} format="date" /></td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
                           <Button size="xs" variant="ghost" icon={Play} disabled={!l.pending} onClick={() => { setListId(l.id); start({ listId: l.id }); }}>Dial</Button>
+                          <Button size="xs" variant="ghost" icon={Pencil} title="Rename list" onClick={() => setRenaming(l)} />
                           <Button size="xs" variant="ghost" icon={RotateCcw} title="Put every lead back in the queue"
                             onClick={async () => { const r = await resetListAction(l.id); if (!r.ok) return toast.error(r.error); toast.success("List reset"); load(); }}>Reset</Button>
                           <Button size="xs" variant="ghost" icon={Archive} title="Archive list"
@@ -199,6 +201,7 @@ export function DialerHome() {
 
       <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} onDone={(id) => { load(); setListId(id); }} />
       <ContactsListDialog open={contactsOpen} onOpenChange={setContactsOpen} onDone={(id) => { load(); setListId(id); }} />
+      {renaming && <RenameDialog list={renaming} onClose={() => setRenaming(null)} onSaved={() => { setRenaming(null); load(); }} />}
       {viewList && <ListDialog list={viewList} onClose={() => setViewList(null)} starting={starting}
         onStart={(ids) => start({ listId: viewList.id, contactIds: ids })} />}
     </Page>
@@ -210,7 +213,7 @@ const SOURCE: Record<string, { label: string; color: "blue" | "gray" | "orange" 
 };
 
 /** Card picker for which lead list to dial. */
-function ListPicker({ lists, loading, selectedId, onSelect, onImport }: { lists: ListRow[]; loading: boolean; selectedId: string; onSelect: (id: string) => void; onImport: () => void }) {
+function ListPicker({ lists, loading, selectedId, onSelect, onImport, onRename }: { lists: ListRow[]; loading: boolean; selectedId: string; onSelect: (id: string) => void; onImport: () => void; onRename: (l: ListRow) => void }) {
   const [q, setQ] = useState("");
   const [all, setAll] = useState(false);
   const shown = useMemo(() => {
@@ -221,18 +224,20 @@ function ListPicker({ lists, loading, selectedId, onSelect, onImport }: { lists:
   if (loading) return <Card><div className="flex justify-center py-6"><Spinner /></div></Card>;
   if (!lists.length) return null;
   return (
-    <Card title="Choose a lead list" actions={lists.length > 8 ? <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search lists" className="h-7 w-48 text-xs" /> : undefined}>
+    <Card title="Choose a lead list" actions={lists.length > 3 ? <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search lists" className="h-7 w-48 text-xs" /> : undefined}>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {shown.map((l) => {
           const active = l.id === selectedId;
           const done = l.total ? Math.round(((l.called + l.skipped) / l.total) * 100) : 0;
           const src = SOURCE[l.source] ?? SOURCE.contacts;
           return (
-            <button key={l.id} onClick={() => onSelect(l.id)}
+            <div key={l.id} role="button" tabIndex={0} onClick={() => onSelect(l.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(l.id); } }}
               className={cn("group rounded-lg border p-3 text-left transition-colors cursor-pointer",
                 active ? "border-accent bg-accent/5 ring-1 ring-accent" : "border-border hover:border-fg-4 hover:bg-hover")}>
               <div className="flex items-start gap-2">
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={l.name}>{l.name}</span>
+                <button type="button" title="Rename list" aria-label={`Rename ${l.name}`} onClick={(e) => { e.stopPropagation(); onRename(l); }}
+                  className="rounded-sm p-0.5 text-fg-4 opacity-0 hover:text-fg group-hover:opacity-100 focus:opacity-100 cursor-pointer"><Pencil className="size-3.5" /></button>
                 <Tag color={src.color}>{src.label}</Tag>
               </div>
               <div className="mt-2 flex items-baseline gap-1">
@@ -247,7 +252,7 @@ function ListPicker({ lists, loading, selectedId, onSelect, onImport }: { lists:
                 <span>{done}% done{l.waiting ? ` · ${l.waiting} waiting` : ""}</span>
                 <span className="ml-auto"><Time value={l.created_at} format="date" /></span>
               </div>
-            </button>
+            </div>
           );
         })}
         {!q && !all && lists.length > 8 && (
@@ -259,6 +264,27 @@ function ListPicker({ lists, loading, selectedId, onSelect, onImport }: { lists:
         {q && !shown.length && <p className="text-xs text-fg-3">No lists match “{q}”.</p>}
       </div>
     </Card>
+  );
+}
+
+function RenameDialog({ list, onClose, onSaved }: { list: ListRow; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(list.name);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    const r = await renameListAction(list.id, name);
+    setBusy(false);
+    if (!r.ok) return toast.error(r.error);
+    toast.success("List renamed");
+    onSaved();
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()} size="sm" title="Rename list"
+      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={busy} disabled={!name.trim() || name.trim() === list.name} onClick={save}>Save</Button></>}>
+      <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) save(); }}>
+        <Field label="List name"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ottawa landscapers" /></Field>
+      </form>
+    </Dialog>
   );
 }
 
