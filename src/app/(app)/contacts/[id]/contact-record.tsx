@@ -31,7 +31,7 @@ import { Folder as FolderIcon } from "lucide-react";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import type { ContactFolder } from "@/lib/types";
 import { useIsStaff } from "@/components/shell/profile-context";
-import { updateContact, deleteContacts, type ContactInput } from "@/lib/actions/crm";
+import { updateContact, deleteContacts, makeClientAction, type ContactInput } from "@/lib/actions/crm";
 import { generateContactInsights, draftFollowUp, sendDraft } from "@/lib/ai-insights";
 import { cn, contactLabel, fmtDate, fmtDateTime, fmtPhone, money, timeAgo } from "@/lib/utils";
 import type { Contact, ContactStatus, PipelineStage } from "@/lib/types";
@@ -58,6 +58,7 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
   const openComms = (channel: "sms" | "email") => { setCommsFocus((f) => ({ channel, n: (f?.n ?? 0) + 1 })); setTab("comms"); };
   const [dealOpen, setDealOpen] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [makeClient, setMakeClient] = React.useState(false);
   const [draftOpen, setDraftOpen] = React.useState(false);
 
   const save = async (patch: ContactInput) => {
@@ -88,7 +89,8 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
             <MenuTrigger asChild><Button size="sm" variant="ghost" icon={MoreHorizontal} aria-label="More" /></MenuTrigger>
             <MenuContent align="end">
               <MenuItem icon={Copy} onSelect={() => { navigator.clipboard.writeText(window.location.href); toast.success("Link copied"); }}>Copy link</MenuItem>
-              {data.client && <MenuItem icon={BadgeCheck} onSelect={() => router.push(`/clients/${data.client!.id}`)}>Open client account</MenuItem>}
+              {data.client ? <MenuItem icon={BadgeCheck} onSelect={() => router.push(`/clients/${data.client!.id}`)}>Open client account</MenuItem>
+                : staff && <MenuItem icon={BadgeCheck} onSelect={() => setMakeClient(true)}>Make client (no contract)</MenuItem>}
               <MenuItem icon={Trash2} danger onSelect={() => setConfirmDelete(true)}>Delete person</MenuItem>
             </MenuContent>
           </Menu>
@@ -108,6 +110,9 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
               {data.client && <Link href={`/clients/${data.client.id}`}><Tag color="green"><BadgeCheck className="size-3" />Client · {money(data.client.mrr)}/mo</Tag></Link>}
               {c.do_not_contact && <Tag color="red">Do not contact</Tag>}
             </div>
+            {!data.client && staff && (
+              <Button size="sm" icon={BadgeCheck} onClick={() => setMakeClient(true)} className="mt-1">Make client</Button>
+            )}
             <div className="mt-2 grid w-full grid-cols-5 gap-1">
               <QuickAction icon={PhoneCall} label="Call" onClick={() => c.phone ? call({ phone: c.phone, contactId: c.id, name }) : toast.error("Add a phone number first")} />
               <QuickAction icon={MessageSquare} label="Text" onClick={() => c.phone ? openComms("sms") : toast.error("Add a phone number first")} />
@@ -210,6 +215,16 @@ export function ContactRecord({ data, currentUserId, initialTab }: { data: Conta
         </section>
       </div>
 
+      <ConfirmDialog open={makeClient} onOpenChange={setMakeClient} danger={false} confirmLabel="Make client"
+        title={`Make ${name} a client?`}
+        description="Creates their client account with your onboarding checklist so you can start delivering. No contract, deal or invoice — add those later if they become paid."
+        onConfirm={async () => {
+          const r = await makeClientAction(c.id);
+          if (!r.ok) { toast.error(r.error); return; }
+          toast.success(r.data.created ? `${name} is now a client` : "Already a client — opening their account");
+          setMakeClient(false);
+          router.push(`/clients/${r.data.clientId}`);
+        }} />
       <NewDealDialog open={dealOpen} onOpenChange={setDealOpen} stages={stages}
         defaults={{ contact_id: c.id, contact_label: name, company_id: c.company_id, name: c.company?.name ? `${c.company.name} — AI build` : `${name} — AI build` }} />
       <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} title={`Delete ${name}?`}

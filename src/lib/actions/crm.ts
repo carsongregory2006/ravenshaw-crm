@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { safe } from "@/lib/actions/util";
 import { emitEvent } from "@/lib/events";
+import { logActivity } from "@/lib/activity";
 import { getProfile } from "@/lib/auth";
 import { toE164 } from "@/lib/utils";
 import type { Contact, Company, Deal, DealLineItem, Task } from "@/lib/types";
@@ -65,6 +66,40 @@ export async function updateContact(id: string, patch: ContactInput) {
     revalidatePath(`/contacts/${id}`);
     revalidatePath("/contacts");
     return null;
+  });
+}
+
+/**
+ * Make a person a client without a contract (warm outreach, free pilot work):
+ * client record + onboarding checklist, contact status → client. No deal, invoice or billing.
+ */
+export async function makeClientAction(contactId: string) {
+  return safe(async () => {
+    const profile = await me();
+    if (!isStaffRole(profile.role)) throw new Error("Only admins and ops can create client accounts");
+    const supabase = await createClient();
+    const { data: existing } = await supabase.from("clients").select("id").eq("contact_id", contactId).neq("status", "churned").limit(1).maybeSingle();
+    if (existing) {
+      await supabase.from("contacts").update({ status: "client" }).eq("id", contactId);
+      return { clientId: existing.id as string, created: false };
+    }
+    const { data: contact } = await supabase.from("contacts").select("id, company_id, owner_id").eq("id", contactId).maybeSingle();
+    if (!contact) throw new Error("Person not found");
+    const { data: client, error } = await supabase.from("clients").insert({
+      contact_id: contact.id, company_id: contact.company_id, account_manager_id: contact.owner_id ?? profile.id, status: "onboarding", mrr: 0,
+    }).select("id").single();
+    if (error) throw new Error(error.message);
+    const { data: settings } = await supabase.from("workspace_settings").select("onboarding_checklist").eq("id", 1).maybeSingle();
+    const checklist: string[] = Array.isArray(settings?.onboarding_checklist) ? settings.onboarding_checklist : [];
+    if (checklist.length) {
+      await supabase.from("onboarding_steps").insert(checklist.map((title, i) => ({ client_id: client.id, title, position: i, assignee_id: contact.owner_id ?? profile.id })));
+    }
+    await supabase.from("contacts").update({ status: "client" }).eq("id", contactId);
+    await logActivity({ type: "system", title: "Made a client (no contract)", contact_id: contactId, client_id: client.id, actor_id: profile.id });
+    revalidatePath(`/contacts/${contactId}`);
+    revalidatePath("/contacts");
+    revalidatePath("/clients");
+    return { clientId: client.id as string, created: true };
   });
 }
 
