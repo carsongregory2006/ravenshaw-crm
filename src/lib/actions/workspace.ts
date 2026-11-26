@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { safe } from "@/lib/actions/util";
 import { getProfile } from "@/lib/auth";
-import { toE164 } from "@/lib/utils";
 import { getDaily, setDailyCheck, dailyHistory, getReminderSettings } from "@/lib/daily";
 import { addProjectTask, createProject, updateProject, updateProjectTask } from "@/lib/projects";
 
@@ -68,12 +67,12 @@ export async function removeDailyItemAction(id: string) {
   });
 }
 
-export async function saveDailyRemindersAction(input: { enabled: boolean; phone: string }) {
+export async function saveDailyRemindersAction(input: { enabled: boolean; email: string }) {
   return safe(async () => {
     await staff();
-    const phone = input.phone.trim() ? toE164(input.phone) : null;
-    if (input.phone.trim() && (!phone || phone.replace(/\D/g, "").length < 10)) throw new Error("That phone number doesn't look right");
-    const { error } = await (await createClient()).from("app_kv").upsert({ key: "daily_reminders", value: { enabled: input.enabled, phone }, updated_at: new Date().toISOString() });
+    const email = input.email.trim().toLowerCase() || null;
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("That email doesn't look right");
+    const { error } = await (await createClient()).from("app_kv").upsert({ key: "daily_reminders", value: { enabled: input.enabled, email }, updated_at: new Date().toISOString() });
     if (error) throw new Error(error.message);
     return null;
   });

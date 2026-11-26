@@ -9,7 +9,7 @@ import { Field, Input, Switch } from "@/components/ui/input";
 import {
   addDailyItemAction, loadDailyAction, removeDailyItemAction, saveDailyRemindersAction, toggleDailyAction, updateDailyItemAction,
 } from "@/lib/actions/workspace";
-import { cn, fmtPhone } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type Data = Extract<Awaited<ReturnType<typeof loadDailyAction>>, { ok: true }>["data"];
 
@@ -18,14 +18,14 @@ export function DailyView() {
   const [editing, setEditing] = React.useState(false);
   const [newItem, setNewItem] = React.useState("");
   const [renaming, setRenaming] = React.useState<{ id: string; title: string } | null>(null);
-  const [phone, setPhone] = React.useState("");
+  const [email, setEmail] = React.useState("");
   const [enabled, setEnabled] = React.useState(true);
 
   const load = React.useCallback(async () => {
     const r = await loadDailyAction();
     if (!r.ok) return toast.error(r.error);
     setData(r.data);
-    setPhone(r.data.reminders.phone ?? "");
+    setEmail(r.data.reminders.email ?? "");
     setEnabled(r.data.reminders.enabled);
   }, []);
   React.useEffect(() => { load(); }, [load]);
@@ -124,16 +124,16 @@ export function DailyView() {
                 })}
               </div>
             </Card>
-            <Card title="Text reminders">
+            <Card title="Email reminders">
               <div className="space-y-2">
                 <label className="flex items-center justify-between text-[13px]">Remind me at 5 PM and 8 PM if not done <Switch checked={enabled} onChange={setEnabled} /></label>
-                <Field label="Text to" hint={!phone ? "Leave empty to use the phone on your profile." : undefined}>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Your cell number" />
+                <Field label="Email to" hint={!email ? "Leave empty to use your login email." : undefined}>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
                 </Field>
                 <Button size="sm" className="w-full" onClick={async () => {
-                  const r = await saveDailyRemindersAction({ enabled, phone });
+                  const r = await saveDailyRemindersAction({ enabled, email });
                   if (!r.ok) return toast.error(r.error);
-                  toast.success(enabled ? `Reminders on${phone ? ` → ${fmtPhone(phone)}` : ""}` : "Reminders off");
+                  toast.success(enabled ? `Reminders on${email ? ` → ${email}` : ""}` : "Reminders off");
                   load();
                 }}>Save</Button>
               </div>

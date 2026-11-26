@@ -51,19 +51,19 @@ export async function dailyHistory(db: SupabaseClient, days = 14) {
 
 // ───────────── Reminder settings (app_kv) ─────────────
 
-export interface DailyReminderSettings { enabled: boolean; phone: string | null }
+export interface DailyReminderSettings { enabled: boolean; email: string | null }
 
 export async function getReminderSettings(db: SupabaseClient): Promise<DailyReminderSettings> {
   const { data } = await db.from("app_kv").select("value").eq("key", "daily_reminders").maybeSingle();
   const v = (data?.value ?? {}) as Partial<DailyReminderSettings>;
-  return { enabled: v.enabled ?? true, phone: v.phone ?? null };
+  return { enabled: v.enabled ?? true, email: v.email ?? null };
 }
 
 /**
  * Called every minute by the CRM tick. At 5 PM and 8 PM Montreal time, if today's checklist isn't
- * finished, text a reminder (once per slot). Phone: the saved reminder number, else the first admin's profile phone.
+ * finished, email a reminder (once per slot). To: the saved reminder email, else the first admin's profile email.
  */
-export async function dailyReminderTick(db: SupabaseClient, sendSms: (to: string, text: string) => Promise<unknown>, at = new Date()) {
+export async function dailyReminderTick(db: SupabaseClient, send: (to: string, subject: string, text: string) => Promise<unknown>, at = new Date()) {
   const hour = localHour(at);
   if (!REMINDER_HOURS.includes(hour)) return "not reminder time";
   const day = todayLocal(at);
@@ -74,17 +74,17 @@ export async function dailyReminderTick(db: SupabaseClient, sendSms: (to: string
   if (!settings.enabled) return "disabled";
   const { items, done, total } = await getDaily(db, day);
   if (!total || done >= total) return "complete";
-  let phone = settings.phone;
-  if (!phone) {
-    const { data: admin } = await db.from("profiles").select("phone").eq("role", "admin").eq("is_active", true).not("phone", "is", null).order("created_at").limit(1).maybeSingle();
-    phone = admin?.phone ?? null;
+  let to = settings.email;
+  if (!to) {
+    const { data: admin } = await db.from("profiles").select("email").eq("role", "admin").eq("is_active", true).not("email", "is", null).order("created_at").limit(1).maybeSingle();
+    to = admin?.email ?? null;
   }
-  if (!phone) return "no phone";
+  if (!to) return "no email";
   // Claim the slot first so a slow send can't double-text.
   const { error } = await db.from("app_kv").insert({ key, value: { at: at.toISOString() } });
   if (error) return "already sent";
   const left = items.filter((i) => !i.done).map((i) => `• ${i.title}`).join("\n");
   const app = process.env.NEXT_PUBLIC_APP_URL ? `\n${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "")}/daily` : "";
-  await sendSms(phone, `Daily inputs: ${done}/${total} done. Still to do:\n${left}${app}`);
+  await send(to, `Daily inputs: ${done}/${total} done — ${total - done} left`, `You've done ${done} of ${total} daily inputs today. Still to do:\n\n${left}\n${app}`);
   return `sent ${done}/${total}`;
 }
