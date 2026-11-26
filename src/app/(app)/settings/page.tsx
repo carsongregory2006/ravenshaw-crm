@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Settings, User, SlidersHorizontal, Users, Columns3, FileText, Plug, Server, type LucideIcon } from "lucide-react";
+import { Settings, User, SlidersHorizontal, Users, Columns3, FileText, Plug, Server, Bot, type LucideIcon } from "lucide-react";
 import { Page, PageHeader } from "@/components/ui/page";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -13,11 +13,13 @@ import { PipelineSettings } from "@/components/settings/pipeline-settings";
 import { TemplateSettings } from "@/components/settings/template-settings";
 import { IntegrationSettings, type IntegrationInfo } from "@/components/settings/integration-settings";
 import { SystemSettings } from "@/components/settings/system-settings";
+import { AiConnectorSettings } from "@/components/settings/ai-connector-settings";
+import { connectorInfo } from "@/lib/mcp/server";
 import type { PipelineStage, Profile, RrMember, Template, WorkspaceSettings } from "@/lib/types";
 
 export const metadata = { title: "Settings" };
 
-type TabId = "profile" | "general" | "team" | "pipeline" | "templates" | "integrations" | "system";
+type TabId = "profile" | "general" | "team" | "pipeline" | "templates" | "integrations" | "ai" | "system";
 const TABS: { id: TabId; label: string; icon: LucideIcon; admin?: boolean; group: string }[] = [
   { id: "profile", label: "Profile", icon: User, group: "User" },
   { id: "general", label: "General", icon: SlidersHorizontal, admin: true, group: "Workspace" },
@@ -25,6 +27,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon; admin?: boolean; group
   { id: "pipeline", label: "Pipeline", icon: Columns3, admin: true, group: "Workspace" },
   { id: "templates", label: "Templates", icon: FileText, group: "Workspace" },
   { id: "integrations", label: "Integrations", icon: Plug, admin: true, group: "Workspace" },
+  { id: "ai", label: "Grok / AI connector", icon: Bot, admin: true, group: "Workspace" },
   { id: "system", label: "System", icon: Server, admin: true, group: "Workspace" },
 ];
 
@@ -79,6 +82,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     ];
     const { data: g } = await sb.from("google_accounts").select("email").eq("user_id", profile.id).maybeSingle();
     content = <IntegrationSettings integrations={list} settings={settings} googleEmail={g?.email ?? null} defaultFromEmail={process.env.RESEND_FROM_EMAIL ?? null} />;
+  } else if (tab === "ai") {
+    content = <AiConnectorSettings info={await connectorInfo()} baseUrl={appUrl("/api/mcp")} />;
   } else if (tab === "system") {
     const db = createAdminClient();
     const [{ data: events }, { data: lastTick }] = await Promise.all([

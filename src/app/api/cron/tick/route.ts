@@ -6,6 +6,8 @@ import { syncAllGoogleCalendars } from "@/lib/calendar/google-sync";
 import { dueReminders } from "@/lib/calendar/reminders";
 import { syncCalendly } from "@/lib/calendly-sync";
 import { integrations } from "@/lib/env";
+import { dailyReminderTick } from "@/lib/daily";
+import { sendSms } from "@/lib/integrations/telnyx";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,6 +26,10 @@ async function tick(req: NextRequest) {
     ["automations", () => processRuns({ limit: 200 })],
     ["billing", () => runBillingCron()],
     ["reminders", () => dueReminders()],
+    ["daily", () => dailyReminderTick(createAdminClient(), async (to, text) => {
+      const { data: ws } = await createAdminClient().from("workspace_settings").select("sms_from_number").eq("id", 1).maybeSingle();
+      return sendSms({ to, text, from: ws?.sms_from_number || undefined });
+    })],
   ];
   // Google sync is heavier; run every 5 minutes.
   if (new Date().getMinutes() % 5 === 0) jobs.push(["google", () => syncAllGoogleCalendars()]);
