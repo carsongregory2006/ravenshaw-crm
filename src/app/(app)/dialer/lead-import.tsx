@@ -13,17 +13,20 @@ import { createListFromContactsAction, importLeadListAction, type LeadImportRow 
 import { contactLabel, fmtPhone } from "@/lib/utils";
 import { autoMap, BUILTIN_FIELDS, customKey, prettyKey, type BuiltinField, type ColumnMap } from "@/lib/csv-mapping";
 
+export const isCsv = (f: File) => /\.csv$/i.test(f.name) || f.type === "text/csv";
+
 const encode = (m: ColumnMap) => (m.kind === "skip" ? "" : m.kind === "field" ? `f:${m.field}` : `c:${m.key}`);
 const decode = (v: string): ColumnMap => (v.startsWith("f:") ? { kind: "field", field: v.slice(2) as BuiltinField } : v.startsWith("c:") ? { kind: "custom", key: v.slice(2) } : { kind: "skip" });
 
-export function LeadImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: (listId: string) => void }) {
+export function LeadImportDialog({ open, onOpenChange, onDone, file }: { open: boolean; onOpenChange: (o: boolean) => void; onDone: (listId: string) => void; file?: File | null }) {
   const [name, setName] = useState("");
   const [data, setData] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<ColumnMap[]>([]);
   const [knownKeys, setKnownKeys] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [keysReady, setKeysReady] = useState(false);
 
-  useEffect(() => { if (!open) { setData([]); setMapping([]); setName(""); } }, [open]);
+  useEffect(() => { if (!open) { setData([]); setMapping([]); setName(""); setKeysReady(false); } }, [open]);
 
   // Custom fields already used on contacts, so repeat columns land in the same field.
   useEffect(() => {
@@ -33,6 +36,7 @@ export function LeadImportDialog({ open, onOpenChange, onDone }: { open: boolean
         const keys = new Set<string>();
         for (const c of data ?? []) for (const k of Object.keys((c.custom_fields as Record<string, unknown>) ?? {})) keys.add(k);
         setKnownKeys([...keys].sort());
+        setKeysReady(true);
       });
   }, [open]);
 
@@ -43,6 +47,11 @@ export function LeadImportDialog({ open, onOpenChange, onDone }: { open: boolean
     if (!name) setName(f.name.replace(/\.csv$/i, ""));
     setMapping(autoMap(rows[0], rows.slice(1, 51), knownKeys));
   };
+
+  // A file dropped on the Power Dialer page: load it once the known custom fields are in.
+  useEffect(() => {
+    if (open && file && keysReady) onFile(file);
+  }, [open, file, keysReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const header = data[0] ?? [];
   const body = data.slice(1);
@@ -88,7 +97,7 @@ export function LeadImportDialog({ open, onOpenChange, onDone }: { open: boolean
       <div className="space-y-3">
         <Field label="List name"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ottawa landscapers — May" /></Field>
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-6 text-[13px] text-fg-2 hover:bg-hover">
-          <FileUp className="size-4" /> {body.length ? `${body.length} rows loaded — choose another file` : "Choose a CSV file"}
+          <FileUp className="size-4" /> {body.length ? `${body.length} rows loaded — drop or choose another file` : "Drop a CSV here or click to choose"}
           <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
         </label>
         {header.length > 0 && (

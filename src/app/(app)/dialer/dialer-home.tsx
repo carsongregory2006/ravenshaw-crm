@@ -17,7 +17,7 @@ import { archiveListAction, renameListAction, resetListAction, startSessionActio
 import { dispositionLabel } from "@/lib/dispositions";
 import { cn, contactLabel, fmtPhone, lineLabel } from "@/lib/utils";
 import type { LeadList, VoicemailDrop } from "@/lib/types";
-import { ContactsListDialog, LeadImportDialog } from "./lead-import";
+import { ContactsListDialog, LeadImportDialog, isCsv } from "./lead-import";
 import { VoicemailManager } from "./voicemails";
 import { CallerIdHealthCard, FoldersCard, useCallerIdHealth, useFolders } from "./folders";
 import { DialerSettingsPanel } from "./dialer-settings";
@@ -34,6 +34,8 @@ export function DialerHome() {
   const [lines, setLines] = useState<string[]>([]);
   const [defaultLine, setDefaultLine] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [viewList, setViewList] = useState<ListRow | null>(null);
   const [renaming, setRenaming] = useState<ListRow | null>(null);
@@ -79,6 +81,36 @@ export function DialerHome() {
     setVoicemails((vms as VoicemailDrop[]) ?? []);
     setListId((cur) => cur || rows[0]?.id || "");
     setLoading(false);
+  }, []);
+
+  // Drag a CSV anywhere on the page to import it (instead of the browser opening the file).
+  useEffect(() => {
+    let depth = 0;
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const enter = (e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; setDragOver(true); };
+    const over = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
+    const leave = (e: DragEvent) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) setDragOver(false); };
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0; setDragOver(false);
+      const f = e.dataTransfer?.files?.[0];
+      if (!f) return;
+      if (!isCsv(f)) { toast.error("That's not a CSV. In Excel or Google Sheets, save it as CSV first."); return; }
+      setDroppedFile(f);
+      setTab("dialer");
+      setImportOpen(true);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
   }, []);
 
   useEffect(() => {
@@ -199,7 +231,12 @@ export function DialerHome() {
         )}
       </PageBody>
 
-      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} onDone={(id) => { load(); setListId(id); }} />
+      <LeadImportDialog open={importOpen} file={droppedFile} onOpenChange={(o) => { setImportOpen(o); if (!o) setDroppedFile(null); }} onDone={(id) => { load(); setListId(id); }} />
+      {dragOver && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="flex items-center gap-2 rounded-xl border-2 border-dashed border-accent bg-bg px-8 py-6 text-[15px] font-medium shadow-lg"><FileUp className="size-5 text-accent" />Drop your CSV to import leads</div>
+        </div>
+      )}
       <ContactsListDialog open={contactsOpen} onOpenChange={setContactsOpen} onDone={(id) => { load(); setListId(id); }} />
       {renaming && <RenameDialog list={renaming} onClose={() => setRenaming(null)} onSaved={() => { setRenaming(null); load(); }} />}
       {viewList && <ListDialog list={viewList} onClose={() => setViewList(null)} starting={starting}
