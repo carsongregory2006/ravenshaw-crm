@@ -4,16 +4,8 @@ import { Megaphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page";
 import { cn, money } from "@/lib/utils";
 
-const TABS = [
-  { href: "/marketing", label: "Campaigns", key: "campaigns" },
-  { href: "/marketing/past", label: "Past campaigns", key: "past" },
-  { href: "/marketing/winners", label: "Winners", key: "winners" },
-  { href: "/marketing/landers", label: "Landers & forms", key: "landers" },
-] as const;
-
-/** Marketing page header: section tabs, optional 7/30/90-day range, actions. The range is kept in ?days when switching tabs. */
-export function MarketingHeader({ active, days, actions, title }: { active: (typeof TABS)[number]["key"]; days?: number; actions?: React.ReactNode; title?: React.ReactNode }) {
-  const q = days ? `?days=${days}` : "";
+/** Marketing page header: optional 7/30/90-day range and actions. Section tabs come from the shell (HubTabs). */
+export function MarketingHeader({ days, actions, title }: { active?: string; days?: number; actions?: React.ReactNode; title?: React.ReactNode }) {
   return (
     <PageHeader icon={Megaphone} title={title ?? "Marketing"} actions={<>
       {days !== undefined && (
@@ -24,13 +16,7 @@ export function MarketingHeader({ active, days, actions, title }: { active: (typ
         </div>
       )}
       {actions}
-    </>}>
-      <div className="ml-2 flex items-center gap-0.5">
-        {TABS.map((t) => (
-          <Link key={t.key} href={`${t.href}${q}`} className={cn("h-6 rounded-md px-2 text-xs leading-6", active === t.key ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover")}>{t.label}</Link>
-        ))}
-      </div>
-    </PageHeader>
+    </>} />
   );
 }
 

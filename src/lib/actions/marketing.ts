@@ -200,3 +200,19 @@ export async function deletePastCampaignFileAction(id: string) {
     return null;
   });
 }
+
+// ───────────── Agents ─────────────
+
+export async function runAgentAction(agent: string, days: number, input: string) {
+  return safe(async () => {
+    await admin();
+    const { AGENTS, runAgent } = await import("@/lib/marketing-agents");
+    const a = AGENTS.find((x) => x.id === agent);
+    if (!a) throw new Error("Unknown agent");
+    const db = await createClient();
+    const output = await runAgent(db, a.id, days, input);
+    const at = new Date().toISOString();
+    await db.from("app_kv").upsert({ key: `mkt_agent:${a.id}`, value: { output, input, days, at }, updated_at: at });
+    return { output, at };
+  });
+}

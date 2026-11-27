@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, LogOut, PanelLeftClose, Search, Bell, User as UserIcon } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { NAV, SETTINGS_ITEM, type NavItem } from "./nav";
+import { NAV, SETTINGS_ITEM, matchPage, visiblePages, type NavItem } from "./nav";
 import { Avatar } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/misc";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
@@ -34,11 +34,8 @@ export function Sidebar({ profile, workspaceName, unread, onSearch, onNotificati
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  // Section roots that have their own sub-pages in the menu only match themselves (Campaigns also owns campaign detail pages).
-  const isActive = (href: string) =>
-    href === "/finance" ? pathname === "/finance"
-      : href === "/marketing" ? pathname === "/marketing" || pathname.startsWith("/marketing/campaigns/")
-        : pathname === href || pathname.startsWith(href + "/");
+  const current = matchPage(pathname);
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   if (collapsed) return null;
 
@@ -91,7 +88,7 @@ export function Sidebar({ profile, workspaceName, unread, onSearch, onNotificati
 
       <nav className="mt-4 flex-1 space-y-4 overflow-y-auto">
         {NAV.map((section) => {
-          const items = section.items.filter((i) => !i.roles || i.roles.includes(profile.role));
+          const items = section.items.filter((h) => (!h.roles || h.roles.includes(profile.role)) && visiblePages(h, profile.role).length);
           if (!items.length) return null;
           const closed = open[section.label] === false;
           return (
@@ -102,7 +99,7 @@ export function Sidebar({ profile, workspaceName, unread, onSearch, onNotificati
               >
                 {section.label}
               </button>
-              {!closed && <div className="space-y-px">{items.map((i) => <NavLink key={i.href} item={i} active={isActive(i.href)} />)}</div>}
+              {!closed && <div className="space-y-px">{items.map((h) => <NavLink key={h.href} item={{ ...h, href: visiblePages(h, profile.role)[0].href }} active={current?.hub.href === h.href} />)}</div>}
             </div>
           );
         })}

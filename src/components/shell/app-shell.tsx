@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { PanelLeftOpen } from "lucide-react";
 import { Sidebar } from "./sidebar";
+import { HubTabs } from "./hub-tabs";
 import { CommandMenu } from "./command-menu";
 import { NotificationsPanel, useNotifications } from "./notifications";
 import { ProfileProvider } from "./profile-context";
@@ -36,7 +37,7 @@ export function AppShell({ profile, workspaceName, children }: { profile: Profil
                 <PanelLeftOpen className="size-4" />
               </button>
             )}
-            <div className={collapsed ? "flex min-h-0 flex-1 flex-col pl-8" : "flex min-h-0 flex-1 flex-col"}>{children}</div>
+            <div className={collapsed ? "flex min-h-0 flex-1 flex-col pl-8" : "flex min-h-0 flex-1 flex-col"}><HubTabs role={profile.role} />{children}</div>
           </main>
         </div>
         <CommandMenu open={cmd} onOpenChange={setCmd} />

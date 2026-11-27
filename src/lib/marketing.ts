@@ -85,3 +85,26 @@ export async function landerRollup(db: SupabaseClient, from: string, to: string)
   }
   return out;
 }
+
+/** The equal-length window right before [from, to]. */
+export function prevRange(days: number) {
+  const to = format(subDays(new Date(), days), "yyyy-MM-dd");
+  const from = format(subDays(new Date(), days * 2 - 1), "yyyy-MM-dd");
+  return { from, to };
+}
+
+/** Totals for every day in [from, to] (zeros for days with no numbers), plus the overall total. */
+export async function dailySeries(db: SupabaseClient, from: string, to: string) {
+  const byDay = new Map<string, Totals>();
+  for (let page = 0; page < 50; page++) {
+    const { data } = await db.from("mkt_ad_stats").select("date, spend, impressions, clicks, leads, won_jobs").gte("date", from).lte("date", to).range(page * 1000, page * 1000 + 999);
+    for (const r of data ?? []) byDay.set(r.date, add(byDay.get(r.date) ?? ZERO, r));
+    if (!data || data.length < 1000) break;
+  }
+  const days: (Totals & { date: string })[] = [];
+  for (let d = new Date(`${from}T12:00:00`); format(d, "yyyy-MM-dd") <= to; d = new Date(d.getTime() + 86400000)) {
+    const k = format(d, "yyyy-MM-dd");
+    days.push({ date: k, ...(byDay.get(k) ?? ZERO) });
+  }
+  return { days, total: days.reduce((s, d) => add(s, d), ZERO) };
+}

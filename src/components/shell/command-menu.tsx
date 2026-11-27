@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Building2, Plus, Target, User } from "lucide-react";
 import * as D from "@radix-ui/react-dialog";
 import { createClient } from "@/lib/supabase/client";
-import { NAV, SETTINGS_ITEM } from "./nav";
+import { ALL_PAGES, SETTINGS_ITEM } from "./nav";
 import { contactLabel } from "@/lib/utils";
 
 type Hit = { id: string; label: string; sub?: string; href: string; kind: "person" | "company" | "deal" };
@@ -86,7 +86,7 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
                 ))}
               </Command.Group>
               <Command.Group heading="Navigate" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-fg-3">
-                {[...NAV.flatMap((s) => s.items), SETTINGS_ITEM]
+                {[...ALL_PAGES, SETTINGS_ITEM]
                   .filter((i) => !q || i.label.toLowerCase().includes(q.toLowerCase()))
                   .map((i) => (
                     <Command.Item key={i.href} value={i.href} onSelect={() => go(i.href)} className={item}>

@@ -12,7 +12,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { MarketingHeader } from "@/components/marketing/header";
 import { AdEntryDialog } from "@/components/marketing/import-dialog";
 import { deleteCampaignAction, setAdLanderAction, setWonJobsAction } from "@/lib/actions/marketing";
-import { MetricCells, MetricHead } from "../../campaigns-view";
+import { MetricCells, MetricHead } from "../campaigns-view";
 
 type T = { spend: number; impressions: number; clicks: number; leads: number; won_jobs: number };
 type Ad = T & { id: string; name: string; ad_set: string; ad_set_id: string; lander_id: string | null };
@@ -27,14 +27,14 @@ export function CampaignDetail({ campaign, adSets, ads, landers, days }: {
   return (
     <Page>
       <MarketingHeader active="campaigns" days={days}
-        title={<span className="flex items-center gap-2"><Link href={`/marketing?days=${days}`} className="text-fg-3 hover:text-fg"><ArrowLeft className="size-4" /></Link>{campaign.name}</span>}
+        title={<span className="flex items-center gap-2"><Link href={`/marketing/campaigns?days=${days}`} className="text-fg-3 hover:text-fg"><ArrowLeft className="size-4" /></Link>{campaign.name}</span>}
         actions={<>
           <Button size="sm" icon={Plus} onClick={() => setAdding(true)}>Add numbers</Button>
           <Button size="sm" variant="ghost" icon={Trash2} aria-label="Delete campaign" onClick={async () => {
             if (!confirm(`Delete "${campaign.name}" with all its ad sets, ads and numbers?`)) return;
             const r = await deleteCampaignAction(campaign.id);
             if (!r.ok) return toast.error(r.error);
-            router.push(`/marketing?days=${days}`);
+            router.push(`/marketing/campaigns?days=${days}`);
           }} />
         </>} />
       <PageBody className="space-y-4">
