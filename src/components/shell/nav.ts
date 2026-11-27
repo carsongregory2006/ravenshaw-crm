@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, User, Building2, Target, BadgeCheck, Rocket, MessagesSquare, Calendar, CheckSquare,
-  BarChart3, Landmark, Phone, Zap, Users, TrendingUp, Receipt, Wallet, Coins, Globe, Workflow, Settings, CalendarCheck, FolderKanban, type LucideIcon,
+  BarChart3, Landmark, Phone, Zap, Users, TrendingUp, Receipt, Wallet, Coins, Globe, Workflow, Settings, CalendarCheck, FolderKanban, Megaphone, Archive, Trophy, LayoutTemplate, type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/lib/types";
 
@@ -36,6 +36,15 @@ export const NAV: NavSection[] = [
       { href: "/landing-pages", label: "Landers", icon: Globe, roles: STAFF },
       { href: "/automations", label: "Automations", icon: Workflow, roles: STAFF },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Marketing",
+    items: [
+      { href: "/marketing", label: "Campaigns", icon: Megaphone, roles: ["admin"] },
+      { href: "/marketing/past", label: "Past campaigns", icon: Archive, roles: ["admin"] },
+      { href: "/marketing/winners", label: "Winners", icon: Trophy, roles: ["admin"] },
+      { href: "/marketing/landers", label: "Landers & forms", icon: LayoutTemplate, roles: ["admin"] },
     ],
   },
   {

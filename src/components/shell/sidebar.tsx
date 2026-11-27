@@ -34,7 +34,11 @@ export function Sidebar({ profile, workspaceName, unread, onSearch, onNotificati
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const isActive = (href: string) => pathname === href || (href !== "/finance" && pathname.startsWith(href + "/")) || (href === "/finance" && pathname === "/finance");
+  // Section roots that have their own sub-pages in the menu only match themselves (Campaigns also owns campaign detail pages).
+  const isActive = (href: string) =>
+    href === "/finance" ? pathname === "/finance"
+      : href === "/marketing" ? pathname === "/marketing" || pathname.startsWith("/marketing/campaigns/")
+        : pathname === href || pathname.startsWith(href + "/");
 
   if (collapsed) return null;
 
